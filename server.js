@@ -52,6 +52,8 @@ safeMount('./routes/debug.routes',       '/debug');
 // mounts
 // ...
 safeMount('./routes/users.routes', '/users');
+safeMount('./routes/auth.routes', '/auth');
+
 
 // auth routes optional later:
 // safeMount('./routes/auth.routes', '/auth');
