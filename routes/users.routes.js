@@ -2,87 +2,78 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
+const { optionalAuth, requireAuth } = require('../middleware/auth');
 
-// ---- SAFE AUTH WRAPPERS (won't crash if middleware/auth exports differ)
-let opt = null, reqd = null;
-try { 
-  const auth = require('../middleware/auth');
-  if (auth && typeof auth.optionalAuth === 'function') opt = auth.optionalAuth;
-  if (auth && typeof auth.requireAuth === 'function') reqd = auth.requireAuth;
-} catch { /* ignore require errors */ }
+router.get('/__ping', (_req, res) => res.json({ ok:true, where:'users' }));
 
-// no-op optional auth (attaches null user) if not provided
-const optionalAuth = opt || (function(req, _res, next) { req.user = req.user || null; next(); });
-// strict auth if not provided -> 401
-const requireAuth = reqd || (function(req, res, _next) {
-  if (!req.user) return res.status(401).json({ ok:false, error:'auth required (x-user-id header)' });
-  res.locals.__safeAuth = true; // marker
-  return _next();
+// Who am I (with bypass)
+router.get('/me', optionalAuth, (req, res) => {
+  const bypass = req.query.bypass === 'true';
+  const headerId = (req.header('x-user-id') || '').trim();
+
+  if (bypass && headerId) {
+    return res.json({ ok:true, mode:'bypass', user:{ id: headerId, fake:true } });
+  }
+  if (!req.user) return res.status(401).json({ ok:false, error:'auth required' });
+  res.json({ ok:true, mode:'normal', user:req.user });
 });
 
-// ---- ROUTES
-router.get('/__ping', (_req, res) => res.json({ ok: true, where: 'users' }));
-
-router.get('/me', optionalAuth, requireAuth, (req, res) => {
-  res.json({ ok: true, user: req.user });
-});
-
+// My wallet
 router.get('/me/wallet', optionalAuth, requireAuth, async (req, res) => {
   try {
     const { rows } = await db.query(
       `SELECT balance_available_inr, balance_reserved_inr, updated_at
-         FROM wallets WHERE user_id = $1`,
+         FROM wallets WHERE user_id=$1`,
       [req.user.id]
     );
-    res.json({
-      ok: true,
-      summary: rows[0] || { balance_available_inr: 0, balance_reserved_inr: 0, updated_at: null }
-    });
-  } catch (e) { res.status(400).json({ ok:false, error:e.message }); }
+    res.json({ ok:true, summary: rows[0] || { balance_available_inr:0, balance_reserved_inr:0 } });
+  } catch (e) {
+    res.status(400).json({ ok:false, error:e.message });
+  }
 });
 
+// Bookings
 router.get('/me/bookings', optionalAuth, requireAuth, async (req, res) => {
   try {
     const { rows } = await db.query(
-      `SELECT * FROM bookings WHERE rider_id = $1
-       ORDER BY created_at DESC LIMIT 200`,
+      `SELECT * FROM bookings WHERE rider_id=$1 ORDER BY created_at DESC LIMIT 200`,
       [req.user.id]
     );
     res.json({ ok:true, items: rows });
   } catch (e) { res.status(400).json({ ok:false, error:e.message }); }
 });
 
+// Deposits
 router.get('/me/deposits', optionalAuth, requireAuth, async (req, res) => {
   try {
     const { rows } = await db.query(
-      `SELECT * FROM deposit_intents WHERE user_id = $1
-       ORDER BY created_at DESC LIMIT 200`,
+      `SELECT * FROM deposit_intents WHERE user_id=$1 ORDER BY created_at DESC LIMIT 200`,
       [req.user.id]
     );
     res.json({ ok:true, items: rows });
   } catch (e) { res.status(400).json({ ok:false, error:e.message }); }
 });
 
+// Settlements
 router.get('/me/settlements', optionalAuth, requireAuth, async (req, res) => {
   try {
     const { rows } = await db.query(
-      `SELECT * FROM settlements WHERE user_id = $1
-       ORDER BY requested_at DESC LIMIT 200`,
+      `SELECT * FROM settlements WHERE user_id=$1 ORDER BY requested_at DESC LIMIT 200`,
       [req.user.id]
     );
     res.json({ ok:true, items: rows });
   } catch (e) { res.status(400).json({ ok:false, error:e.message }); }
 });
 
+// Rides (as driver)
 router.get('/me/rides', optionalAuth, requireAuth, async (req, res) => {
   try {
     const { rows } = await db.query(
-      `SELECT * FROM rides WHERE driver_id = $1
-       ORDER BY created_at DESC LIMIT 200`,
+      `SELECT * FROM rides WHERE driver_id=$1 ORDER BY created_at DESC LIMIT 200`,
       [req.user.id]
     );
     res.json({ ok:true, items: rows });
   } catch (e) { res.status(400).json({ ok:false, error:e.message }); }
 });
 
-module.exports = router; // <-- must export the router function
+module.exports = router;
