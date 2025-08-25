@@ -1,0 +1,9 @@
+aws-xxx-pooler.supabase.net : The term 'aws-xxx-pooler.supabase.net' is not recognized as the name of a cmdlet, 
+function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the 
+path is correct and try again.
+At line:1 char:1
++ aws-xxx-pooler.supabase.net -Port 6543
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (aws-xxx-pooler.supabase.net:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
