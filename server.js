@@ -9,7 +9,10 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // -------- middleware
-app.use(cors());
+// Node/Express example
+
+app.use(cors({ origin: '*'})); // tighten later if you want
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // ← allow form-encoded bodies too
 
@@ -69,9 +72,7 @@ process.on('unhandledRejection', (r) => console.warn('UnhandledRejection:', r));
 process.on('uncaughtException', (e) => console.error('UncaughtException:', e));
 
 // -------- start
-app.listen(PORT, () => {
-  if (process.env.DATABASE_URL) {
-    try { console.log('DB host via DATABASE_URL:', new URL(process.env.DATABASE_URL).hostname); } catch {}
-  }
-  console.log(`Server running on port ${PORT}`);
+// Node/Express example
+app.listen(5000, '0.0.0.0', () => {
+  console.log('API listening on http://0.0.0.0:5000');
 });
