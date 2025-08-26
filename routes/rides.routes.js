@@ -75,4 +75,43 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+* GET /rides/search?from=...&to=...&date=YYYY-MM-DD
+ * Returns { rides: [ ... ] }
+ */
+router.get('/search', async (req, res) => {
+  const { from = '', to = '', date } = req.query;
+
+  // TODO: replace with DB search (Supabase / Postgres etc.)
+  // For now return mock results filtered by "from"/"to" contains.
+  const all = [
+    {
+      id: 'r1',
+      from: 'Delhi',
+      to: 'Gurgaon',
+      departure: `${date ?? new Date().toISOString().slice(0,10)}T18:30:00.000Z`,
+      seats: 3,
+      price: 120.0,
+      driver: 'Amit',
+    },
+    {
+      id: 'r2',
+      from: 'Delhi',
+      to: 'Noida',
+      departure: `${date ?? new Date().toISOString().slice(0,10)}T19:15:00.000Z`,
+      seats: 2,
+      price: 100.0,
+      driver: 'Riya',
+    },
+  ];
+
+  const term = (s) => s.toString().trim().toLowerCase();
+  const resList = all.filter(r =>
+    (from ? term(r.from).contains(term(from)) : true) &&
+    (to ? term(r.to).contains(term(to)) : true)
+  );
+
+  res.json({ rides: resList });
+});
+
+
 module.exports = router;

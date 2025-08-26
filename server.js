@@ -16,7 +16,8 @@ app.use(cors({ origin: '*'})); // tighten later if you want
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // ← allow form-encoded bodies too
 
-
+// mount rides routes
+app.use('/rides', require('./routes/rides')); // adjust path if different
 
 // -------- health + db ping
 app.get('/health', (_req, res) => {
