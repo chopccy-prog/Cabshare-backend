@@ -1,94 +1,181 @@
-// server.js
-// Minimal Express API for Cabshare — rides publish/search/book.
-// Works locally and from phone on same Wi-Fi.
+// server.js (drop-in replacement)
+// Works with Node 16+
+// Run: npm i express cors
+// Start: node server.js
 
 const express = require('express');
 const cors = require('cors');
-const { v4: uuid } = require('uuid');
-const dayjs = require('dayjs');
+const crypto = require('crypto');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+app.use(cors());                 // allow phone <-> PC requests on LAN
+app.use(express.json());         // parse JSON bodies
 
-app.use(cors({ origin: true }));
-app.use(express.json());
+// ---------- CONFIG ----------
+const PORT = process.env.PORT ? Number(process.env.PORT) : 5000;
+const HOST = process.env.HOST || '0.0.0.0';
 
-app.get('/health', (_req, res) => res.json({ ok: true }));
+// If/when you move to Supabase, set these and use its client in the TODO sections below:
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
 
-// In-memory store for now — swap to DB/Supabase later.
+// ---------- IN-MEMORY STORE (replace with Supabase later) ----------
+/** @type {Array<any>} */
 let rides = [];
 
-/**
- * Publish a ride
- * body: { from, to, date: 'YYYY-MM-DD', time: 'HH:mm', seats, price, driverName?, vehicle?, notes? }
- */
-app.post('/rides', (req, res) => {
-  const { from, to, date, time, seats, price, driverName, vehicle, notes } = req.body || {};
-  if (!from || !to || !date || !time || !seats) {
-    return res.status(400).json({ error: 'from, to, date, time, seats are required' });
+// Optional: start with a couple of seed rides so the app can search immediately
+(function seed() {
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10); // YYYY-MM-DD
+  rides.push(
+    {
+      id: crypto.randomUUID(),
+      from: 'Delhi',
+      to: 'Gurgaon',
+      when: `${today}T14:00:00Z`,
+      seats: 3,
+      price: 120,
+      driver_name: 'Amit',
+      driver_phone: '9999999999',
+      car: 'WagonR'
+    },
+    {
+      id: crypto.randomUUID(),
+      from: 'Noida',
+      to: 'Delhi',
+      when: `${today}T18:30:00Z`,
+      seats: 2,
+      price: 90,
+      driver_name: 'Neha',
+      driver_phone: '8888888888',
+      car: 'i20'
+    }
+  );
+})();
+
+// ---------- HELPERS ----------
+function normalizeRideIn(body) {
+  const b = body || {};
+
+  // id / _id
+  const id = (b.id || b._id || crypto.randomUUID()).toString();
+
+  // from/to or origin/destination
+  const from = (b.from || b.origin || '').toString();
+  const to = (b.to || b.destination || '').toString();
+
+  // when OR (date + time)
+  let when;
+  if (b.when) {
+    when = new Date(b.when);
+  } else if (b.date || b.time) {
+    const date = (b.date || new Date().toISOString().slice(0, 10)).toString(); // YYYY-MM-DD
+    const time = (b.time || '00:00').toString();                                 // HH:mm
+    when = new Date(`${date}T${time}:00Z`);
+  } else {
+    when = new Date();
   }
-  const dateTime = dayjs(`${date} ${time}`).toISOString();
-  const ride = {
-    id: uuid(),
+
+  // seats / available_seats
+  let seats = 0;
+  if (typeof b.seats !== 'undefined') seats = Number(b.seats) || 0;
+  else if (typeof b.available_seats !== 'undefined') seats = Number(b.available_seats) || 0;
+
+  // price / amount
+  let price = 0;
+  if (typeof b.price !== 'undefined') price = Number(b.price) || 0;
+  else if (typeof b.amount !== 'undefined') price = Number(b.amount) || 0;
+
+  // driver info (accepts flat or nested)
+  const driverName =
+    (b.driver_name || b.driverName || (b.driver && b.driver.name) || '').toString();
+  const driverPhone =
+    (b.driver_phone || b.driverPhone || (b.driver && b.driver.phone) || '').toString();
+  const car =
+    (b.car || (b.driver && b.driver.car) || '').toString();
+
+  return {
+    id,
     from,
     to,
-    dateTime,
-    seatsAvailable: Number(seats),
-    price: Number(price || 0),
-    driverName: driverName || 'Host',
-    vehicle: vehicle || '',
-    notes: notes || '',
-    cashbackOnCancelPercent: 25,
-    createdAt: new Date().toISOString(),
+    when: when.toISOString(),
+    seats,
+    price,
+    driver_name: driverName,
+    driver_phone: driverPhone,
+    car
   };
-  rides.push(ride);
-  res.status(201).json(ride);
+}
+
+function filterRides(list, { from, to, date }) {
+  let out = list;
+  if (from) out = out.filter(r => r.from.toLowerCase().includes(from.toLowerCase()));
+  if (to) out = out.filter(r => r.to.toLowerCase().includes(to.toLowerCase()));
+  if (date) out = out.filter(r => (r.when || '').startsWith(date)); // compare YYYY-MM-DD prefix
+  return out;
+}
+
+// ---------- ROUTES ----------
+app.get('/health', (_req, res) => {
+  res.json({ ok: true });
 });
 
-/**
- * Search rides
- * body: { from?, to?, date?: 'YYYY-MM-DD' }
- */
+// Example: GET /rides?from=delhi&to=gurgaon&date=2025-08-27
+app.get('/rides', (req, res) => {
+  const q = {
+    from: (req.query.from || req.query.origin || '').toString(),
+    to: (req.query.to || req.query.destination || '').toString(),
+    date: (req.query.date || '').toString(), // YYYY-MM-DD
+  };
+
+  // TODO (Supabase): select * from rides with filters
+  // const { data, error } = await supabase.from('rides').select('*').match(...)
+
+  const list = filterRides(rides, q);
+  res.json({ rides: list });
+});
+
+// Example: POST /rides/search  body: { from, to, date }
 app.post('/rides/search', (req, res) => {
-  const { from, to, date } = req.body || {};
-  const qFrom = (from || '').trim().toLowerCase();
-  const qTo = (to || '').trim().toLowerCase();
-  const day = date ? dayjs(date) : null;
+  const q = {
+    from: (req.body?.from || req.body?.origin || '').toString(),
+    to: (req.body?.to || req.body?.destination || '').toString(),
+    date: (req.body?.date || '').toString(),
+  };
 
-  const items = rides.filter((r) =>
-    (!qFrom || r.from.toLowerCase().includes(qFrom)) &&
-    (!qTo || r.to.toLowerCase().includes(qTo)) &&
-    (!day || dayjs(r.dateTime).isSame(day, 'day'))
-  );
-
-  res.json({ items });
+  // TODO (Supabase): same as above
+  const list = filterRides(rides, q);
+  res.json({ rides: list });
 });
 
-/**
- * Book seats
- * body: { seats: number, userName?: string }
- */
-app.post('/rides/:id/book', (req, res) => {
-  const { id } = req.params;
-  const { seats = 1, userName = 'Guest' } = req.body || {};
-  const ride = rides.find((r) => r.id === id);
-  if (!ride) return res.status(404).json({ error: 'Ride not found' });
+// Example: POST /rides  body: { from, to, when OR date+time, seats, price, ... }
+app.post('/rides', (req, res) => {
+  try {
+    const normalized = normalizeRideIn(req.body || {});
+    // Minimal validation
+    if (!normalized.from || !normalized.to) {
+      return res.status(400).json({ error: 'from and to are required' });
+    }
+    rides.push(normalized);
 
-  const n = Number(seats);
-  if (ride.seatsAvailable < n) return res.status(400).json({ error: 'Not enough seats' });
+    // TODO (Supabase): insert into rides table and return saved row
+    // const { data, error } = await supabase.from('rides').insert([normalized]).select().single()
 
-  ride.seatsAvailable -= n;
-  res.json({ ok: true, ride, booked: { seats: n, userName } });
+    return res.status(201).json({ ride: normalized });
+  } catch (e) {
+    console.error('POST /rides error:', e);
+    return res.status(500).json({ error: 'failed_to_create_ride' });
+  }
 });
 
-app.get('/rides/:id', (req, res) => {
-  const ride = rides.find((r) => r.id === req.params.id);
-  if (!ride) return res.status(404).json({ error: 'Ride not found' });
-  res.json(ride);
+// For now, return all. Later, scope by authenticated user.
+app.get('/rides/mine', (_req, res) => {
+  // TODO (Supabase): filter by user_id when auth is added
+  res.json({ rides });
 });
 
-app.get('/rides', (_req, res) => res.json({ items: rides }));
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`API listening at http://0.0.0.0:${PORT}`);
+// ---------- START ----------
+app.listen(PORT, HOST, () => {
+  console.log(`Cabshare API listening at http://${HOST}:${PORT}`);
+  console.log(`Health: http://${HOST}:${PORT}/health`);
 });
