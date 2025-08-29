@@ -3,8 +3,9 @@ const express = require('express');
 const cors = require('cors');
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+
 
 const rides = [];   // in-memory
 const bookings = []; // optional bookings
