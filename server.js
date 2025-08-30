@@ -1,250 +1,262 @@
-// server.js
+// server.js  — Supabase-backed API keeping the existing JSON shape
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const morgan = require('morgan');
 const Joi = require('joi');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 app.use(helmet());
-app.use(cors());
+app.use(cors({ origin: process.env.CORS_ORIGIN?.split(',') ?? true }));
 app.use(express.json());
-app.use(morgan('dev'));
 
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-// ---------------- In-memory data (swap to DB/Supabase later) ----------------
-let rides = [];          // {id, from, to, when(ISO), seats, price, notes?, pool}
-let conversations = [];  // {id, title, members:[string], lastText?}
-let messages = [];       // {id, conversationId, from, text, ts}
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  // Use SERVICE_ROLE for server-side writes (keep it secret!)
+  process.env.SUPABASE_SERVICE_ROLE,
+  { auth: { persistSession: false } }
+);
 
-// ---------------- Helpers ----------------
-const ok = (res, payload) => res.json({ ok: true, ...payload });
-const fail = (res, status, error) => res.status(status).json({ ok: false, error });
-
-const makeId = (p = '') => p + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-
-// ---------------- Joi Schemas ----------------
-
-// Create ride: we no longer accept phone/driverName here.
-// Either send a single ISO `when`, or a `date` (YYYY-MM-DD) + `time` (HH:mm)
+// ---------- Validation ----------
 const rideCreateSchema = Joi.object({
-  from: Joi.string().trim().min(2).required(),
-  to: Joi.string().trim().min(2).required(),
-  when: Joi.date().optional(),
-  date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  time: Joi.string().pattern(/^\d{2}:\d{2}$/).optional(),
+  from: Joi.string().min(1).required(),
+  to: Joi.string().min(1).required(),
+  when: Joi.string().isoDate().required(), // ISO string
   seats: Joi.number().integer().min(1).max(8).required(),
   price: Joi.number().min(0).required(),
-  notes: Joi.string().max(200).allow('', null),
-  pool: Joi.string().valid('private', 'commercial', 'fullcar').default('private'),
-}).oxor('when', 'date')
-  .with('date', 'time')
-  .unknown(false);
+  pool: Joi.string().valid('private','commercial','fullcar').default('private'),
+  // Linked via profile later; allow but not required to keep older clients harmless
+  driverName: Joi.string().allow('', null),
+  driverPhone: Joi.string().allow('', null),
+}).unknown(false);
 
 const rideSearchSchema = Joi.object({
   from: Joi.string().allow('', null),
   to: Joi.string().allow('', null),
   date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow('', null),
-  pool: Joi.string().valid('private', 'commercial', 'fullcar').allow('', null),
-  driverName: Joi.string().allow('', null), // future filter (no data yet)
-}).unknown(false);
-
-const bookParamSchema = Joi.object({
-  id: Joi.string().required(),
-});
-
-const conversationCreateSchema = Joi.object({
-  title: Joi.string().allow('', null),
-  members: Joi.array().items(Joi.string()).min(1).required(),
-}).unknown(false);
+  pool: Joi.string().valid('private','commercial','fullcar').allow('', null),
+  driverName: Joi.string().allow('', null),
+}).unknown(true);
 
 const messageCreateSchema = Joi.object({
   conversationId: Joi.string().required(),
-  from: Joi.string().required(),
+  from: Joi.string().min(1).required(),
   text: Joi.string().min(1).required(),
 }).unknown(false);
 
-// ---------------- Health ----------------
-app.get('/health', (_req, res) => ok(res, { health: 'ok' }));
+// ---------- Helpers ----------
+const ok = (res, data) => res.json({ ok: true, data });
+const fail = (res, status, error) => res.status(status).json({ ok: false, error });
 
-// ---------------- Rides (search/list) ----------------
+const mapRideRow = (r) => ({
+  id: r.id,
+  from: r.from_place,
+  to: r.to_place,
+  when: r.when_at,              // ISO string from Supabase
+  seats: r.seats,
+  price: typeof r.price === 'string' ? Number(r.price) : r.price,
+  driverName: r.driver_name ?? null,
+  driverPhone: r.driver_phone ?? null,
+  booked: r.booked,
+  pool: r.pool,
+});
+const mapConversationRow = (c) => ({
+  id: c.id,
+  title: c.title,
+  members: c.members ?? [],
+  lastText: c.last_text ?? '',
+});
+const mapMessageRow = (m) => ({
+  id: m.id,
+  conversationId: m.conversation_id,
+  from: m.sender,
+  text: m.text,
+  ts: m.ts,
+});
 
-// This is what your Flutter client calls.
-// Returns { ok: true, rides: [...] }
-app.get('/search', (req, res) => {
+// ---------- Health ----------
+app.get('/health', (_req, res) => ok(res, { ok: true }));
+
+// ---------- Rides ----------
+app.get('/rides', async (req, res) => {
   const { value, error } = rideSearchSchema.validate(req.query);
   if (error) return fail(res, 400, error.message);
 
-  let result = rides.slice();
+  let q = supabase.from('rides')
+    .select('*')
+    .order('when_at', { ascending: false });
 
-  if (value.from) {
-    const f = String(value.from).toLowerCase();
-    result = result.filter(r => r.from.toLowerCase().includes(f));
-  }
-  if (value.to) {
-    const t = String(value.to).toLowerCase();
-    result = result.filter(r => r.to.toLowerCase().includes(t));
-  }
-  if (value.date) {
-    result = result.filter(r => new Date(r.when).toISOString().startsWith(value.date));
-  }
-  if (value.pool) {
-    result = result.filter(r => r.pool === value.pool);
-  }
-  // driverName filter placeholder (no driverName on ride yet)
-  if (value.driverName) {
-    // keep for future when profile enriches rides
-  }
+  if (value.from) q = q.ilike('from_place', `%${value.from}%`);
+  if (value.to) q = q.ilike('to_place', `%${value.to}%`);
+  if (value.pool) q = q.eq('pool', value.pool);
+  if (value.date) q = q.gte('when_at', `${value.date}T00:00:00.000Z`).lte('when_at', `${value.date}T23:59:59.999Z`);
+  if (value.driverName) q = q.ilike('driver_name', `%${value.driverName}%`);
 
-  ok(res, { rides: result });
+  const { data, error: err } = await q;
+  if (err) return fail(res, 500, err.message);
+
+  ok(res, (data ?? []).map(mapRideRow));
 });
 
-// Mirrors /search so older code that calls /rides still works
-app.get('/rides', (req, res) => {
-  const { value, error } = rideSearchSchema.validate(req.query);
-  if (error) return fail(res, 400, error.message);
-
-  let result = rides.slice();
-
-  if (value.from) {
-    const f = String(value.from).toLowerCase();
-    result = result.filter(r => r.from.toLowerCase().includes(f));
-  }
-  if (value.to) {
-    const t = String(value.to).toLowerCase();
-    result = result.filter(r => r.to.toLowerCase().includes(t));
-  }
-  if (value.date) {
-    result = result.filter(r => new Date(r.when).toISOString().startsWith(value.date));
-  }
-  if (value.pool) {
-    result = result.filter(r => r.pool === value.pool);
-  }
-  ok(res, { rides: result });
-});
-
-// Create/publish a ride (NO phone/driverName here).
-app.post('/rides', (req, res) => {
+app.post('/rides', async (req, res) => {
   const { value, error } = rideCreateSchema.validate(req.body);
   if (error) return fail(res, 400, error.message);
 
-  let when = value.when ? new Date(value.when) : null;
-  if (!when && value.date && value.time) {
-    when = new Date(`${value.date}T${value.time}:00`);
-  }
-  if (!when || isNaN(when.getTime())) {
-    return fail(res, 400, 'Invalid datetime');
-  }
-
-  const ride = {
-    id: makeId('r_'),
-    from: value.from.trim(),
-    to: value.to.trim(),
-    when: when.toISOString(),
+  const row = {
+    from_place: value.from,
+    to_place: value.to,
+    when_at: new Date(value.when).toISOString(),
     seats: value.seats,
-    price: Number(value.price),
-    notes: value.notes || '',
+    price: value.price,
+    driver_name: value.driverName || null,
+    driver_phone: value.driverPhone || null,
+    booked: false,
     pool: value.pool || 'private',
-    createdAt: new Date().toISOString(),
-    // future: ownerId/driverId/carId from auth session
   };
 
-  rides.unshift(ride);
-  ok(res, { ride });
+  const { data, error: err } = await supabase.from('rides').insert(row).select().single();
+  if (err) return fail(res, 500, err.message);
+
+  ok(res, mapRideRow(data));
 });
 
-// Book endpoints (support both shapes):
-app.post('/book/:id', (req, res) => bookRideHandler(req, res));
-app.post('/rides/:id/book', (req, res) => bookRideHandler(req, res));
+// NOTE: For production, make this atomic via SQL function (included in SQL below).
+app.post('/rides/:id/book', async (req, res) => {
+  const rideId = req.params.id;
 
-function bookRideHandler(req, res) {
-  const { value, error } = bookParamSchema.validate({ id: req.params.id });
-  if (error) return fail(res, 400, error.message);
+  // 1) Fetch
+  const { data: r, error: e1 } = await supabase.from('rides').select('*').eq('id', rideId).single();
+  if (e1) return fail(res, 404, 'Ride not found');
+  if (!r || r.seats <= 0) return fail(res, 409, 'No seats left');
 
-  const r = rides.find(x => x.id === value.id);
-  if (!r) return fail(res, 404, 'Ride not found');
-  if (r.seats <= 0) return fail(res, 409, 'No seats left');
+  // 2) Update with seats-1
+  const { data: updated, error: e2 } = await supabase
+    .from('rides')
+    .update({ seats: r.seats - 1, booked: r.seats - 1 <= 0 })
+    .eq('id', rideId)
+    .select()
+    .single();
+  if (e2) return fail(res, 500, e2.message);
 
-  r.seats -= 1;
+  // 3) Ensure conversation exists for this ride
+  let convId;
+  {
+    const { data: conv } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('ride_id', rideId)
+      .maybeSingle();
 
-  // Create/find a conversation for this ride between "driver" and "rider"
-  // (placeholders until auth is wired)
-  let conv = conversations.find(c => c.id === `c_${r.id}`);
-  if (!conv) {
-    conv = {
-      id: `c_${r.id}`,
-      title: `Ride ${r.from} → ${r.to}`,
-      members: ['driver', 'rider'], // replace with real identities later
-      lastText: 'Booking created',
-    };
-    conversations.unshift(conv);
+    if (conv) {
+      convId = conv.id;
+    } else {
+      const title = `Ride ${r.from_place} → ${r.to_place} (${r.driver_name ?? 'driver'})`;
+      const members = [r.driver_name ?? 'driver', 'rider']; // Replace with real user IDs after Auth
+      const { data: created, error: e3 } = await supabase
+        .from('conversations')
+        .insert({ ride_id: rideId, title, members, last_text: 'Booking created' })
+        .select()
+        .single();
+      if (e3) return fail(res, 500, e3.message);
+      convId = created.id;
+    }
   }
-  const msg = {
-    id: makeId('m_'),
-    conversationId: conv.id,
-    from: 'system',
+
+  // 4) System message
+  await supabase.from('messages').insert({
+    conversation_id: convId,
+    sender: 'system',
     text: 'Booking confirmed',
-    ts: new Date().toISOString(),
-  };
-  messages.push(msg);
+  });
 
-  ok(res, { id: r.id, seats: r.seats });
-}
-
-// ---------------- Conversations & Messages ----------------
-app.get('/conversations', (req, res) => {
-  const user = (req.query.user || '').toString().toLowerCase();
-  let result = conversations;
-  if (user) {
-    result = result.filter(c =>
-      (c.members || []).some(m => m.toLowerCase().includes(user))
-    );
-  }
-  ok(res, { conversations: result });
+  ok(res, { id: updated.id, seats: updated.seats });
 });
 
-app.post('/conversations', (req, res) => {
-  const { value, error } = conversationCreateSchema.validate(req.body);
+app.get('/my-rides', async (req, res) => {
+  const { value, error } = rideSearchSchema.validate(req.query);
   if (error) return fail(res, 400, error.message);
-  const conv = {
-    id: makeId('c_'),
-    title: value.title || 'Conversation',
-    members: value.members,
-    lastText: '',
-  };
-  conversations.unshift(conv);
-  ok(res, { conversation: conv });
+
+  let q = supabase.from('rides').select('*').order('when_at', { ascending: false });
+  if (value.driverName) q = q.ilike('driver_name', `%${value.driverName}%`);
+
+  const { data, error: err } = await q;
+  if (err) return fail(res, 500, err.message);
+  ok(res, (data ?? []).map(mapRideRow));
 });
 
-app.get('/messages', (req, res) => {
+// ---------- Conversations & Messages ----------
+app.get('/conversations', async (req, res) => {
+  const user = (req.query.user || '').toString().trim();
+  let q = supabase.from('conversations').select('*').order('created_at', { ascending: false });
+
+  if (user) {
+    // exact member match: members array contains user string
+    q = q.contains('members', [user]);
+  }
+
+  const { data, error } = await q;
+  if (error) return fail(res, 500, error.message);
+  ok(res, (data ?? []).map(mapConversationRow));
+});
+
+app.post('/conversations', async (req, res) => {
+  const schema = Joi.object({
+    title: Joi.string().allow('', null),
+    members: Joi.array().items(Joi.string()).min(1).required(),
+    rideId: Joi.string().allow('', null),
+  });
+  const { value, error } = schema.validate(req.body);
+  if (error) return fail(res, 400, error.message);
+
+  const { data, error: err } = await supabase
+    .from('conversations')
+    .insert({
+      title: value.title || 'Conversation',
+      members: value.members,
+      ride_id: value.rideId || null,
+    })
+    .select()
+    .single();
+
+  if (err) return fail(res, 500, err.message);
+  ok(res, mapConversationRow(data));
+});
+
+app.get('/messages', async (req, res) => {
   const conversationId = (req.query.conversationId || '').toString();
   if (!conversationId) return fail(res, 400, 'conversationId required');
-  const ms = messages.filter(m => m.conversationId === conversationId);
-  ok(res, { messages: ms });
+
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .order('ts', { ascending: true });
+
+  if (error) return fail(res, 500, error.message);
+  ok(res, (data ?? []).map(mapMessageRow));
 });
 
-app.post('/messages', (req, res) => {
+app.post('/messages', async (req, res) => {
   const { value, error } = messageCreateSchema.validate(req.body);
   if (error) return fail(res, 400, error.message);
 
-  const msg = {
-    id: makeId('m_'),
-    conversationId: value.conversationId,
-    from: value.from,
-    text: value.text,
-    ts: new Date().toISOString(),
-  };
-  messages.push(msg);
+  const { data, error: err } = await supabase
+    .from('messages')
+    .insert({ conversation_id: value.conversationId, sender: value.from, text: value.text })
+    .select()
+    .single();
+  if (err) return fail(res, 500, err.message);
 
-  const c = conversations.find(x => x.id === value.conversationId);
-  if (c) c.lastText = value.text;
+  // update lastText on conversation
+  await supabase.from('conversations').update({ last_text: value.text }).eq('id', value.conversationId);
 
-  ok(res, { message: msg });
+  ok(res, mapMessageRow(data));
 });
 
-// ---------------- Start ----------------
 app.listen(PORT, HOST, () => {
   console.log(`API listening at http://${HOST}:${PORT}`);
 });
