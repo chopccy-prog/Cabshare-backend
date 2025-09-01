@@ -47,16 +47,14 @@ app.use('/inbox', attachUser, require('./routes/inbox.routes'));
 app.use('/admin', attachUser, requireAuth, require('./routes/admin.routes')); // admin-like tasks
 app.use('/users', attachUser, require('./routes/users.routes'));
 app.use('/debug', attachUser, require('./routes/debug.routes'));
-
-// 404 JSON (prevents HTML pages)
-app.use((req, res) => {
-  res.status(404).json({ error: 'not_found', path: req.path });
-});
+app.use('/messages', require('./routes/messages.routes'));   
+// 404 JSON (never serve HTML)
+app.use((req, res) => res.status(404).json({ error: 'not_found', path: req.path }));
 
 // error JSON
 app.use((err, _req, res, _next) => {
   console.error(err);
-  res.status(500).json({ error: 'server_error', message: err.message });
+  res.status(500).json({ error: err.message || 'server_error' });
 });
 
 // near the bottom where app.listen is called:

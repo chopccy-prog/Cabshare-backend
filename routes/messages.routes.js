@@ -2,20 +2,28 @@
 const express = require('express');
 const router = express.Router();
 const { supabase } = require('../config/supabase');
-const { getUserIdFromAuth } = require('../config/auth');
+
+function uidFromAuth(req) {
+  const auth = req.headers['authorization'] || '';
+  const m = /^Bearer\s+(.+)$/i.exec(auth);
+  if (!m) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(m[1].split('.')[1], 'base64url').toString('utf8'));
+    return payload.sub || null;
+  } catch { return null; }
+}
 
 // GET /messages
-// - If ride_id & other_user_id given -> return that conversation thread
-// - Else -> return inbox (latest messages where user is sender/recipient)
+// - inbox if no params
+// - thread if ride_id & other_user_id
 router.get('/', async (req, res) => {
   try {
-    const uid = getUserIdFromAuth(req);
+    const uid = uidFromAuth(req);
     if (!uid) return res.status(401).json({ error: 'unauthorized' });
 
     const { ride_id, other_user_id } = req.query;
 
     if (ride_id && other_user_id) {
-      // Conversation thread
       const { data, error } = await supabase
         .from('messages')
         .select('id, ride_id, sender_id, recipient_id, text, created_at')
@@ -27,7 +35,6 @@ router.get('/', async (req, res) => {
       return res.json({ items: data || [] });
     }
 
-    // Inbox list (last 50 messages involving me)
     const { data, error } = await supabase
       .from('messages')
       .select('id, ride_id, sender_id, recipient_id, text, created_at')
@@ -42,20 +49,20 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /messages  { ride_id, recipient_id, text }
+// POST /messages  { ride_id?, recipient_id, text }
 router.post('/', async (req, res) => {
   try {
-    const uid = getUserIdFromAuth(req);
+    const uid = uidFromAuth(req);
     if (!uid) return res.status(401).json({ error: 'unauthorized' });
 
-    const { ride_id, recipient_id, text } = req.body || {};
-    if (!recipient_id || !text) {
+    const b = req.body || {};
+    if (!b.recipient_id || !b.text) {
       return res.status(400).json({ error: 'recipient_id and text are required' });
     }
 
     const { data, error } = await supabase
       .from('messages')
-      .insert([{ ride_id: ride_id || null, sender_id: uid, recipient_id, text }])
+      .insert([{ ride_id: b.ride_id || null, sender_id: uid, recipient_id: b.recipient_id, text: b.text }])
       .select('id')
       .single();
 
