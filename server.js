@@ -74,101 +74,67 @@ const messageCreateSchema = Joi.object({
 app.get('/health', (_req, res) => ok(res, { ok: true }));
 
 // ---------- rides: search ----------
+// --- Rides (search) ---
 app.get('/rides', async (req, res) => {
-  const { value, error } = rideSearchSchema.validate(req.query);
-  if (error) return fail(res, 400, error.message);
+  try {
+    const { from, to, date, pool, driverName } = req.query;
 
-  // Base select from compat view
-  let q = supabase.from('rides_compat').select('*');
+    let q = supabase.from('rides_compat').select('*');
 
-  // Simple client-side style filters: we’ll fetch then filter if needed.
-  // (Supabase ilike on views is fine too; we’ll do it server-side to keep it simple)
-  const { data, error: err } = await q;
-  if (err) return fail(res, 500, err.message);
+    if (from) q = q.ilike('from', `%${from}%`);
+    if (to) q = q.ilike('to', `%${to}%`);
+    if (date) q = q.gte('when', `${date}T00:00:00`).lt('when', `${date}T23:59:59`);
+    // pool is currently fixed to 'private' in view; keep for later mapping
+    if (driverName) q = q.ilike('driverName', `%${driverName}%`);
 
-  let list = data || [];
+    const { data, error } = await q.order('when', { ascending: true });
 
-  if (value.from) {
-    const f = value.from.toLowerCase();
-    list = list.filter(r => (r.from || '').toLowerCase().includes(f));
+    if (error) return fail(res, 500, error.message);
+    return ok(res, data || []);
+  } catch (e) {
+    return fail(res, 500, e.message);
   }
-  if (value.to) {
-    const t = value.to.toLowerCase();
-    list = list.filter(r => (r.to || '').toLowerCase().includes(t));
-  }
-  if (value.date) {
-    list = list.filter(r => {
-      // r.when is timestamp (string); compare YYYY-MM-DD prefix
-      const iso = new Date(r.when).toISOString().slice(0, 10);
-      return iso === value.date;
-    });
-  }
-  if (value.pool) {
-    // View currently returns 'private' — keep filter for future when pool is real
-    list = list.filter(r => (r.pool || 'private') === value.pool);
-  }
-  if (value.driverName) {
-    const d = value.driverName.toLowerCase();
-    list = list.filter(r => (r.driverName || '').toLowerCase().includes(d));
-  }
-
-  ok(res, list);
 });
+
 
 // ---------- rides: publish (RPC app_publish_ride) ----------
 // POST /rides  (publish)
+// POST /rides  -> publish via RPC
 app.post('/rides', async (req, res) => {
   try {
     const { from, to, when, seats, price, pool } = req.body;
 
-    // basic shape check (you already have Joi; keep if you like)
-    if (!from || !to || !when || !seats || !price) {
+    if (!from || !to || !when || !seats || price == null) {
       return fail(res, 400, 'from, to, when, seats, price are required');
     }
 
-    const { data, error } = await supabase.rpc('publish_ride_simple', {
-      _from: from,
-      _to: to,
-      _when: new Date(when).toISOString(),
-      _seats: Number(seats),
-      _price: Number(price),
-      _pool: pool || 'private',
-      _driver: null // or pass a real driver UUID if you have auth context
+    const { data, error } = await supabase.rpc('publish_ride_slim', {
+      p_from: from, p_to: to,
+      p_when: new Date(when).toISOString(),
+      p_seats: Number(seats),
+      p_price: Number(price),
+      p_pool: pool || 'private'
     });
 
-    if (error) {
-      console.error('publish_ride_simple error:', error);
-      return fail(res, 500, error.message || 'publish failed');
-    }
-
-    // publish_ride_simple returns a rowset; we want the single row
-    const row = Array.isArray(data) ? data[0] : data;
-
-    // Keep the frontend contract:
-    // { ok:true, data:{id, from, to, when, seats, price, pool, booked} }
-    return ok(res, row);
+    if (error) return fail(res, 500, error.message);
+    return ok(res, { id: data.id }); // { id: '...' }
   } catch (e) {
-    console.error(e);
-    return fail(res, 500, 'unexpected error');
+    return fail(res, 500, e.message);
   }
 });
-
-
 // ---------- rides: book (RPC app_book_ride) ----------
 app.post('/rides/:id/book', async (req, res) => {
-  const { value, error } = bookSchema.validate({ id: req.params.id });
-  if (error) return fail(res, 400, error.message);
+  try {
+    const rideId = req.params.id;
+    const { data, error } = await supabase.rpc('api_book_ride', { p_ride_id: rideId });
 
-  const { data, error: err } = await supabase.rpc('app_book_ride', { p_ride_id: value.id });
-  if (err) {
-    // Keep same semantics as earlier (404 if not found, 409 no seats)
-    if (err.message && /not found/i.test(err.message)) return fail(res, 404, 'Ride not found');
-    if (err.message && /No seats left/i.test(err.message)) return fail(res, 409, 'No seats left');
-    return fail(res, 500, err.message);
+    if (error) return fail(res, 500, error.message);
+    return ok(res, data); // { id, seats }
+  } catch (e) {
+    return fail(res, 500, e.message);
   }
-  const row = Array.isArray(data) ? data[0] : data;
-  ok(res, row);
 });
+
 
 // ---------- conversations ----------
 app.get('/conversations', async (req, res) => {
@@ -179,6 +145,23 @@ app.get('/conversations', async (req, res) => {
   if (error) return fail(res, 500, error.message);
   ok(res, data || []);
 });
+
+app.get('/my-rides', async (req, res) => {
+  try {
+    const { driverName } = req.query;
+    let q = supabase.from('rides_compat').select('*');
+
+    if (driverName) q = q.ilike('driverName', `%${driverName}%`);
+
+    const { data, error } = await q.order('when', { ascending: false });
+    if (error) return fail(res, 500, error.message);
+
+    return ok(res, data || []);
+  } catch (e) {
+    return fail(res, 500, e.message);
+  }
+});
+
 
 // ---------- messages (read) ----------
 app.get('/messages', async (req, res) => {
