@@ -1,0 +1,162 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Cabshare Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; max-width: 900px; margin: 24px auto; }
+    section { border: 1px solid #ddd; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+    input, button, select { padding: 8px; margin: 4px 0; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .error { color: #b00020; }
+    .ok { color: #0a7f3f; }
+    pre { background: #f7f7f7; padding: 8px; border-radius: 6px; overflow:auto; }
+  </style>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <h2>Cabshare Admin</h2>
+
+  <section id="auth">
+    <h3>Login (Email/Password)</h3>
+    <div class="row">
+      <input id="supabaseUrl" placeholder="SUPABASE_URL"/>
+      <input id="supabaseAnon" placeholder="SUPABASE_ANON_KEY" />
+    </div>
+    <div class="row">
+      <input id="email" placeholder="admin email"/>
+      <input id="password" placeholder="password" type="password"/>
+      <button id="btnLogin">Sign In</button>
+      <button id="btnLogout" disabled>Sign Out</button>
+    </div>
+    <div id="authMsg"></div>
+  </section>
+
+  <section id="seed">
+    <h3>Seed Basic Cities & Routes</h3>
+    <button id="btnSeed">Seed Nashik / Pune / Mumbai + 3 Routes</button>
+    <div id="seedMsg"></div>
+  </section>
+
+  <section id="cities">
+    <h3>Cities</h3>
+    <div class="row">
+      <input id="cityName" placeholder="City name"/>
+      <button id="btnCityAdd">Add/Upsert City</button>
+      <button id="btnCityList">List</button>
+    </div>
+    <pre id="citiesOut"></pre>
+  </section>
+
+  <section id="routes">
+    <h3>Routes</h3>
+    <div class="row">
+      <input id="routeCode" placeholder="Code e.g. NSK-PNQ"/>
+      <input id="fromCityId" placeholder="from_city_id" type="number"/>
+      <input id="toCityId" placeholder="to_city_id" type="number"/>
+      <input id="distanceKm" placeholder="distance_km" type="number"/>
+      <button id="btnRouteCreate">Create</button>
+      <button id="btnRouteList">List</button>
+    </div>
+    <pre id="routesOut"></pre>
+  </section>
+
+  <script>
+    const API = (path) => `${location.origin}${path}`;
+    let supa, token = null;
+
+    const byId = id => document.getElementById(id);
+    const setMsg = (elId, msg, ok=false) => {
+      const el = byId(elId);
+      el.className = ok ? 'ok' : 'error';
+      el.textContent = msg;
+    };
+
+    async function login() {
+      const url = byId('supabaseUrl').value.trim();
+      const anon = byId('supabaseAnon').value.trim();
+      const email = byId('email').value.trim();
+      const password = byId('password').value;
+
+      if (!url || !anon || !email || !password) {
+        setMsg('authMsg', 'Fill URL, anon key, email, password'); return;
+      }
+      supa = supabase.createClient(url, anon);
+      try {
+        const { data, error } = await supa.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        token = data.session?.access_token;
+        if (!token) throw new Error('No access token');
+        setMsg('authMsg', 'Signed in', true);
+        byId('btnLogout').disabled = false;
+      } catch (e) {
+        setMsg('authMsg', e.message || String(e));
+      }
+    }
+
+    async function logout() {
+      if (!supa) return;
+      await supa.auth.signOut();
+      token = null;
+      setMsg('authMsg', 'Signed out', true);
+      byId('btnLogout').disabled = true;
+    }
+
+    async function call(method, path, body) {
+      if (!token) throw new Error('Please login first');
+      const resp = await fetch(API(path), {
+        method,
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const j = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(j.error || `HTTP ${resp.status}`);
+      return j;
+    }
+
+    // Seed
+    byId('btnSeed').onclick = async () => {
+      try { const j = await call('POST', '/admin/seed-basic'); setMsg('seedMsg', JSON.stringify(j), true); }
+      catch (e) { setMsg('seedMsg', e.message || String(e)); }
+    };
+
+    // Cities
+    byId('btnCityAdd').onclick = async () => {
+      try {
+        const name = byId('cityName').value.trim();
+        const j = await call('POST', '/admin/cities', { name });
+        byId('citiesOut').textContent = JSON.stringify(j, null, 2);
+      } catch (e) { setMsg('citiesOut', e.message || String(e)); }
+    };
+    byId('btnCityList').onclick = async () => {
+      try {
+        const j = await call('GET', '/admin/cities');
+        byId('citiesOut').textContent = JSON.stringify(j, null, 2);
+      } catch (e) { setMsg('citiesOut', e.message || String(e)); }
+    };
+
+    // Routes
+    byId('btnRouteCreate').onclick = async () => {
+      try {
+        const code = byId('routeCode').value.trim();
+        const from_city_id = Number(byId('fromCityId').value);
+        const to_city_id = Number(byId('toCityId').value);
+        const distance_km = Number(byId('distanceKm').value || 0);
+        const j = await call('POST', '/admin/routes', { code, from_city_id, to_city_id, distance_km });
+        byId('routesOut').textContent = JSON.stringify(j, null, 2);
+      } catch (e) { setMsg('routesOut', e.message || String(e)); }
+    };
+    byId('btnRouteList').onclick = async () => {
+      try {
+        const j = await call('GET', '/admin/routes');
+        byId('routesOut').textContent = JSON.stringify(j, null, 2);
+      } catch (e) { setMsg('routesOut', e.message || String(e)); }
+    };
+
+    // Auth buttons
+    byId('btnLogin').onclick = login;
+    byId('btnLogout').onclick = logout;
+  </script>
+</body>
+</html>

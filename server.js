@@ -13,6 +13,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
+const path = require('path');
 const bodyParser = require('body-parser');
 const { supabaseUserClient, supabaseAdmin } = require('./config/supabase');
 const { requireAuth, attachUser } = require('./middleware/auth');
@@ -29,6 +30,11 @@ app.use(cors({
 }));
 app.use(bodyParser.json({ limit: '1mb' }));
 app.use(morgan('dev'));
+app.use(express.static(path.join(__dirname, 'public')));
+// Optional: convenience redirect
+app.get('/admin-ui', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
 
 // Health
 app.get('/api', (req, res) => res.json({ ok: true, name: 'Cabshare API', ts: new Date().toISOString() }));
