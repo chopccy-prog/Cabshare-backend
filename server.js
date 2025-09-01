@@ -30,6 +30,7 @@ app.use(cors({
 }));
 app.use(bodyParser.json({ limit: '1mb' }));
 app.use(morgan('dev'));
+app.get('/health', (_req, res) => res.json({ ok: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 // Optional: convenience redirect
 app.get('/admin-ui', (_req, res) => {
@@ -47,5 +48,8 @@ app.use('/admin', attachUser, requireAuth, require('./routes/admin.routes')); //
 app.use('/users', attachUser, require('./routes/users.routes'));
 app.use('/debug', attachUser, require('./routes/debug.routes'));
 
+// near the bottom where app.listen is called:
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Cabshare API listening on :${PORT}`));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server listening on http://0.0.0.0:${PORT}`);
+});
