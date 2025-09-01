@@ -48,6 +48,17 @@ app.use('/admin', attachUser, requireAuth, require('./routes/admin.routes')); //
 app.use('/users', attachUser, require('./routes/users.routes'));
 app.use('/debug', attachUser, require('./routes/debug.routes'));
 
+// 404 JSON (prevents HTML pages)
+app.use((req, res) => {
+  res.status(404).json({ error: 'not_found', path: req.path });
+});
+
+// error JSON
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(500).json({ error: 'server_error', message: err.message });
+});
+
 // near the bottom where app.listen is called:
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
