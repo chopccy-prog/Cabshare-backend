@@ -1,117 +1,70 @@
 // routes/rides.routes.js
-const express = require('express');
-const router = express.Router();
-const Rides = require('../models/rides.model');
-//const { optionalAuth } = require('../middleware/auth');
-//router.use(optionalAuth); // 👈 this line
+const router = require('express').Router();
+const { supabaseUserClient } = require('../config/supabase');
 
-// lightweight ping
-router.get('/__ping', (_req, res) => res.json({ ok: true, where: 'rides' }));
-
-// ---- DIAG: prove DB responds from this router ----
-router.get('/search/__diag', async (_req, res) => {
-  try {
-    const info = await Rides.diag();
-    res.json({ ok: true, ...info });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-// ---- SEARCH: fast & safe ----
-// GET /rides/search?routeId=<uuid>&date=YYYY-MM-DD
+// GET /rides/search?from=Nashik&to=Mumbai&when=2025-09-01
 router.get('/search', async (req, res) => {
-  const { routeId, date } = req.query;
+  const { from, to, when } = req.query;
+  const jwt = req.user?.token;
+  const sb = supabaseUserClient(jwt);
 
-  // simple input sanity
-  if (routeId && !/^[0-9a-f-]{36}$/i.test(routeId)) {
-    return res.status(400).json({ ok: false, error: 'routeId must be a UUID' });
-  }
-  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return res.status(400).json({ ok: false, error: 'date must be YYYY-MM-DD' });
-  }
+  // prefer view "rides_search_view" for richer info; fallback to "rides_search_compat"
+  let q = sb.from('rides_search_view').select('*').order('when', { ascending: true }).limit(100);
+  if (from) q = q.ilike('from_city', from);
+  if (to) q = q.ilike('to_city', to);
+  if (when) q = q.gte('date', when).lte('date', when);
 
-  const label = `RIDES_SEARCH ${routeId || '-'} ${date || '-'}`;
-  console.time(label);
-  try {
-    const items = await Rides.search({ routeId, date });
-    console.timeEnd(label);
-    res.json({ ok: true, items });
-  } catch (e) {
-    console.timeEnd(label);
-    res.status(400).json({ ok: false, error: e.message });
-  }
+  const { data, error } = await q;
+  if (error) return res.status(500).json({ error: error.message });
+  return res.json({ items: data || [] });
 });
 
-// ---- CREATE (unchanged) ----
-router.post('/', async (req, res) => {
-  try {
-    const ride = await Rides.createRide(req.body);
-    res.status(201).json({ ok: true, ride });
-  } catch (e) {
-    res.status(400).json({ ok: false, error: e.message });
+// POST /rides/publish
+// body: { from, to, whenDate: 'YYYY-MM-DD', whenTime: 'HH:mm', seats, price, pool }
+router.post('/publish', async (req, res) => {
+  const jwt = req.user?.token;
+  const sb = supabaseUserClient(jwt);
+  const { from, to, whenDate, whenTime, seats=1, price=0, pool='private', driver_id=null } = req.body;
+
+  const { data, error } = await sb
+    .rpc('app_publish_ride', {
+      p_from: from, p_to: to,
+      p_when: `${whenDate} ${whenTime}`,
+      p_seats: seats, p_price_inr: price,
+      p_pool: pool, p_driver_id: driver_id
+    });
+
+  if (error) return res.status(400).json({ error: error.message });
+  res.json({ ride: data?.[0] ?? null });
+});
+
+// GET /rides/mine?role=driver|rider
+router.get('/mine', async (req, res) => {
+  const jwt = req.user?.token;
+  const sb = supabaseUserClient(jwt);
+  const role = (req.query.role || 'driver').toLowerCase();
+
+  if (role === 'rider') {
+    // rides where I have a booking
+    const { data, error } = await sb
+      .from('bookings')
+      .select('*, rides!inner(*, route:routes(*), from_stop:stops(*), to_stop:stops(*))')
+      .eq('rider_id', req.user?.id)
+      .order('created_at', { ascending: false });
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ items: data || [] });
+  } else {
+    // rides where I am the driver
+    const { data, error } = await sb
+      .from('rides')
+      .select('*, route:routes(*), allowed:ride_allowed_stops(*), created_by')
+      .eq('driver_id', req.user?.id)
+      .order('created_at', { ascending: false });
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ items: data || [] });
   }
 });
-
-// ---- GET BY ID ----
-router.get('/:id', async (req, res) => {
-  try {
-    const ride = await Rides.getById(req.params.id);
-    if (!ride) return res.status(404).json({ ok: false, error: 'Ride not found' });
-    res.json({ ok: true, ride });
-  } catch (e) {
-    res.status(400).json({ ok: false, error: e.message });
-  }
-});
-
-// ---- UPDATE ----
-router.put('/:id', async (req, res) => {
-  try {
-    const ride = await Rides.updateRide(req.params.id, req.body);
-    if (!ride) return res.status(404).json({ ok: false, error: 'Ride not found' });
-    res.json({ ok: true, ride });
-  } catch (e) {
-    res.status(400).json({ ok: false, error: e.message });
-  }
-});
-
-* GET /rides/search?from=...&to=...&date=YYYY-MM-DD
- * Returns { rides: [ ... ] }
- */
-router.get('/search', async (req, res) => {
-  const { from = '', to = '', date } = req.query;
-
-  // TODO: replace with DB search (Supabase / Postgres etc.)
-  // For now return mock results filtered by "from"/"to" contains.
-  const all = [
-    {
-      id: 'r1',
-      from: 'Delhi',
-      to: 'Gurgaon',
-      departure: `${date ?? new Date().toISOString().slice(0,10)}T18:30:00.000Z`,
-      seats: 3,
-      price: 120.0,
-      driver: 'Amit',
-    },
-    {
-      id: 'r2',
-      from: 'Delhi',
-      to: 'Noida',
-      departure: `${date ?? new Date().toISOString().slice(0,10)}T19:15:00.000Z`,
-      seats: 2,
-      price: 100.0,
-      driver: 'Riya',
-    },
-  ];
-
-  const term = (s) => s.toString().trim().toLowerCase();
-  const resList = all.filter(r =>
-    (from ? term(r.from).contains(term(from)) : true) &&
-    (to ? term(r.to).contains(term(to)) : true)
-  );
-
-  res.json({ rides: resList });
-});
-
 
 module.exports = router;

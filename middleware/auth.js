@@ -1,33 +1,31 @@
 // middleware/auth.js
-const db = require('../config/db');
+const jwt = require('jsonwebtoken');
 
-// Optional: attach user if x-user-id header exists
-async function optionalAuth(req, _res, next) {
-  const userId = (req.header('x-user-id') || '').trim();
-  if (!userId) { req.user = null; return next(); }
-
-  try {
-    const { rows } = await db.query(
-      `SELECT id, full_name, email, role, is_verified
-         FROM users_app WHERE id = $1`,
-      [userId]
-    );
-    req.user = rows[0] || null;
-    next();
-  } catch (err) {
-    next(err);
-  }
-}
-
-// Require user
-function requireAuth(req, res, next) {
-  if (!req.user) {
-    return res.status(401).json({
-      ok: false,
-      error: 'auth required (x-user-id header)'
-    });
+/**
+ * attachUser: extract bearer token, decode, and attach { userId, token } if present.
+ * We don't fail request here — some endpoints can be public.
+ */
+function attachUser(req, _res, next) {
+  const auth = req.headers['authorization'] || '';
+  const parts = auth.split(' ');
+  if (parts[0] === 'Bearer' && parts[1]) {
+    const token = parts[1];
+    try {
+      // We don't verify signature here to avoid server needing the JWT secret.
+      // Supabase will enforce RLS using this token anyway.
+      const payload = jwt.decode(token) || {};
+      req.user = { id: payload.sub, token };
+    } catch (_e) {
+      req.user = undefined;
+    }
   }
   next();
 }
 
-module.exports = { optionalAuth, requireAuth };
+/** requireAuth: hard-block if user is not present */
+function requireAuth(req, res, next) {
+  if (!req.user?.id) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+
+module.exports = { attachUser, requireAuth };
