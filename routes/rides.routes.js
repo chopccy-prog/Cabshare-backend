@@ -1,223 +1,220 @@
 // routes/rides.routes.js
 const express = require('express');
 const router = express.Router();
-const { supabase } = require('../supabase'); // keep your client import
+const { supabase } = require('../supabase'); // keep your existing supabase client
 
+// helper: auth
 function getUserId(req) {
-  return (
-    req.header('x-user-id') ||
-    req.header('x-user') ||
-    (req.user && req.user.id) ||
-    null
-  );
+  const uid = req.user?.id || req.user?.sub || req.auth?.userId || req.auth?.sub;
+  return uid || null;
 }
 
-// ---------- helpers ----------
-function normalizeRidePayload(body = {}, userId) {
-  // city names
-  const from =
-    body.from ?? body.from_city ?? body.source ?? body.origin ?? null;
-  const to =
-    body.to ?? body.to_city ?? body.destination ?? body.dest ?? null;
-
-  // date/time (accept many aliases)
-  const depart_date =
-    body.depart_date ?? body.date ?? body.when ?? body.departDate ?? null;
-  const depart_time =
-    body.depart_time ?? body.time ?? body.departTime ?? null;
-
-  // seats / price
-  const seats_total = Number(
-    body.seats_total ?? body.seats ?? body.total_seats ?? body.capacity ?? 0
-  );
-
-  // ⚠️ IMPORTANT: never mix ?? and || without parentheses
-  const rawSeatsAvail =
-    body.seats_available ?? body.available_seats ?? seats_total;
-  const seats_available = Number((rawSeatsAvail ?? 0));
-
-  const price_inr = Number(
-    body.price_inr ?? body.price ?? body.price_per_seat_inr ?? 0
-  );
-
-  // category → pool/is_commercial (compat)
-  let pool = (body.pool ?? '').toString().toLowerCase();
-  let is_commercial =
-    body.is_commercial === true ||
-    body.is_commercial === 'true' ||
-    body.is_commercial === 1;
-
-  const category = (body.category ?? '').toString().toLowerCase();
-  if (!pool && category) {
-    if (category.includes('full')) {
-      pool = 'private';
-      is_commercial = true;
-    } else if (category.includes('commercial')) {
-      pool = 'shared';
-      is_commercial = true;
-    } else {
-      pool = 'shared';
-      is_commercial = false;
-    }
-  }
-  if (pool !== 'private') pool = 'shared';
-
-  return {
-    driver_id: userId ?? body.driver_id ?? null,
-    from,
-    to,
-    depart_date,       // YYYY-MM-DD
-    depart_time,       // HH:mm (optional)
-    seats_total,
-    seats_available,
-    price_inr,
-    pool,
-    is_commercial: !!is_commercial,
-    status: body.status ?? 'published',
-  };
-}
-
-function toClient(row) {
-  const dd = row.depart_date || row.date || row.when || null;
-  const dt = row.depart_time || row.time || null;
-  const when = dd && dt ? `${dd} ${dt}` : dd ? `${dd}` : dt ? `${dt}` : '';
-
-  return {
-    id: row.id,
-    from: row.from || row.from_city || row.source || null,
-    to: row.to || row.to_city || row.destination || null,
-    depart_date: row.depart_date || row.date || row.when || null,
-    depart_time: row.depart_time || row.time || null,
-    when, // compat for current UI
-    seats_total:
-      row.seats_total ?? row.total_seats ?? row.capacity ?? row.seats ?? 0,
-    seats_available:
-      row.seats_available ?? row.available_seats ?? row.seats ?? 0,
-    seats:
-      row.seats_available ?? row.available_seats ?? row.seats ?? 0, // compat
-    price_inr:
-      row.price_inr ?? row.price_per_seat_inr ?? row.price ?? 0,
-    price:
-      row.price_inr ?? row.price_per_seat_inr ?? row.price ?? 0, // compat
-    pool: row.pool === 'private' ? 'private' : 'shared',
-    is_commercial: !!(row.is_commercial ?? row.commercial ?? false),
-    status: row.status ?? 'published',
-  };
-}
-
-// ---------- routes ----------
-
-// GET /rides/search?from=&to=&when=YYYY-MM-DD
-router.get('/search', async (req, res) => {
+// ---------- SEARCH ----------
+router.get('/', async (req, res) => {
   try {
-    const qFrom = (req.query.from || '').trim();
-    const qTo = (req.query.to || '').trim();
-    const qWhen = (req.query.when || '').trim();
+    const { from, to, when } = req.query;
 
-    let q = supabase.from('rides').select('*').eq('status', 'published');
-
-    if (qFrom) q = q.or(`from.eq.${qFrom},from_city.eq.${qFrom}`);
-    if (qTo) q = q.or(`to.eq.${qTo},to_city.eq.${qTo}`);
-    if (qWhen) q = q.eq('depart_date', qWhen);
-
-    q = q.order('depart_date', { ascending: true })
-         .order('depart_time', { ascending: true });
-
-    const { data, error } = await q;
-    if (error) return res.status(400).json({ error: error.message });
-
-    res.json((data || []).map(toClient));
-  } catch (e) {
-    res.status(500).json({ error: `${e}` });
-  }
-});
-
-// POST /rides/publish
-router.post('/publish', async (req, res) => {
-  try {
-    const userId = getUserId(req);
-    if (!userId) return res.status(401).json({ error: 'unauthorized' });
-
-    const payload = normalizeRidePayload(req.body, userId);
-
-    if (!payload.from || !payload.to || !payload.depart_date) {
-      return res.status(400).json({ error: 'missing required fields: depart_date' });
-    }
-
-    if (!payload.seats_total || payload.seats_total < 1) payload.seats_total = 1;
-    if (payload.seats_available == null || payload.seats_available < 0) {
-      payload.seats_available = payload.seats_total;
-    }
-
-    const { data, error } = await supabase
+    // NOTE: DB columns are from_location / to_location / depart_date
+    let q = supabase
       .from('rides')
-      .insert(payload)
-      .select('*')
-      .single();
+      .select('id, from_location, to_location, depart_date, depart_time, price_inr, seats_total, seats_available, is_commercial, pool')
+      .eq('status', 'published');
 
-    if (error) return res.status(400).json({ error: error.message });
-    res.json(toClient(data));
+    if (from && from.trim()) q = q.ilike('from_location', `%${from.trim()}%`);
+    if (to && to.trim())   q = q.ilike('to_location', `%${to.trim()}%`);
+    if (when && when.trim()) q = q.eq('depart_date', when.trim()); // YYYY-MM-DD
+
+    const { data, error } = await q.order('depart_date', { ascending: true }).order('depart_time', { ascending: true });
+    if (error) throw error;
+
+    // normalize keys for app list tiles
+    const items = (data || []).map(r => ({
+      id: r.id,
+      from: r.from_location,
+      to: r.to_location,
+      when: r.depart_date,
+      start_time: r.depart_time,
+      price_inr: r.price_inr,
+      seats: r.seats_available ?? r.seats_total ?? 0,
+      is_commercial: r.is_commercial,
+      pool: r.pool,
+    }));
+
+    res.json(items);
   } catch (e) {
-    res.status(500).json({ error: `${e}` });
+    res.status(400).json({ error: e.message || String(e) });
   }
 });
 
-// GET /rides/mine?role=driver|rider
-router.get('/mine', async (req, res) => {
-  try {
-    const userId = getUserId(req);
-    if (!userId) return res.status(401).json({ error: 'unauthorized' });
-
-    const role = (req.query.role || 'driver').toString();
-
-    if (role === 'driver') {
-      const { data, error } = await supabase
-        .from('rides')
-        .select('*')
-        .eq('driver_id', userId)
-        .order('depart_date', { ascending: false })
-        .order('depart_time', { ascending: false });
-
-      if (error) return res.status(400).json({ error: error.message });
-      return res.json((data || []).map(toClient));
-    }
-
-    // Rider list: return [] for now unless you wire a bookings table.
-    return res.json([]);
-  } catch (e) {
-    res.status(500).json({ error: `${e}` });
-  }
-});
-
-// GET /rides/:id
+// ---------- GET RIDE DETAIL ----------
 router.get('/:id', async (req, res) => {
   try {
-    const rideId = req.params.id;
+    const { id } = req.params;
 
     const { data: ride, error } = await supabase
       .from('rides')
-      .select('*')
-      .eq('id', rideId)
+      .select(`
+        id, driver_id, from_location, to_location,
+        depart_date, depart_time, price_inr,
+        seats_total, seats_available, is_commercial, pool,
+        car_make, car_model, car_number, notes,
+        created_at, updated_at
+      `)
+      .eq('id', id)
       .single();
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) throw error;
 
+    // join driver (users table) – do a separate fetch to avoid relationship-cache errors
     let driver = null;
-    if (ride && ride.driver_id) {
-      const { data: u } = await supabase
+    if (ride?.driver_id) {
+      const { data: u, error: ue } = await supabase
         .from('users')
         .select('id, full_name, phone')
         .eq('id', ride.driver_id)
         .single();
-      driver = u || null;
+      if (!ue) driver = u;
     }
 
-    const resp = toClient(ride);
-    resp.driver = driver;
-
-    res.json(resp);
+    res.json({
+      id: ride.id,
+      from: ride.from_location,
+      to: ride.to_location,
+      depart_date: ride.depart_date,
+      depart_time: ride.depart_time,
+      price_per_seat_inr: ride.price_inr,
+      seats_total: ride.seats_total,
+      seats_available: ride.seats_available,
+      is_commercial: ride.is_commercial,
+      pool: ride.pool,
+      car_make: ride.car_make,
+      car_model: ride.car_model,
+      car_number: ride.car_number,
+      notes: ride.notes,
+      driver,
+    });
   } catch (e) {
-    res.status(500).json({ error: `${e}` });
+    res.status(400).json({ error: e.message || String(e) });
+  }
+});
+
+// ---------- PUBLISH ----------
+router.post('/', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'unauthorized' });
+
+    const body = req.body || {};
+
+    // Accept multiple client keys, map to DB columns
+    const from_location = body.from_location ?? body.from ?? body.fromCity ?? '';
+    const to_location   = body.to_location   ?? body.to   ?? body.toCity   ?? '';
+    const depart_date   = body.depart_date   ?? body.date ?? body.when     ?? null; // expect YYYY-MM-DD
+    const depart_time   = body.depart_time   ?? body.time ?? null;                  // HH:MM
+    const seats_total   = Number(
+      body.seats_total ?? body.seats ?? body.total_seats ?? 0
+    );
+    const price_inr = Number(
+      body.price_inr ?? body.price ?? body.price_per_seat_inr ?? 0
+    );
+    const is_commercial = !!(body.is_commercial ?? (body.category === 'commercial'));
+    // pool: 'shared' (pool ride) or 'private' (full car)
+    const pool = body.pool
+      ?? (body.category === 'commercial_full_car' ? 'private'
+        : body.category === 'commercial_pool' ? 'shared'
+        : 'shared');
+
+    if (!from_location || !to_location || !depart_date) {
+      return res.status(400).json({ error: 'missing required fields: depart_date' });
+    }
+
+    const insertObj = {
+      driver_id: userId,
+      from_location,
+      to_location,
+      depart_date,
+      depart_time,
+      price_inr,
+      seats_total,
+      seats_available: Number(
+        body.seats_available ?? body.available_seats ?? seats_total || 0
+      ),
+      is_commercial,
+      pool,
+      status: 'published',
+    };
+
+    const { data, error } = await supabase
+      .from('rides')
+      .insert(insertObj)
+      .select('id')
+      .single();
+
+    if (error) throw error;
+
+    res.json({ id: data.id });
+  } catch (e) {
+    res.status(400).json({ error: e.message || String(e) });
+  }
+});
+
+// ---------- MY RIDES ----------
+router.get('/mine/published', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'unauthorized' });
+
+    const { data, error } = await supabase
+      .from('rides')
+      .select('id, from_location, to_location, depart_date, depart_time, price_inr, seats_total, seats_available, is_commercial, pool, status')
+      .eq('driver_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const items = (data || []).map(r => ({
+      id: r.id,
+      from: r.from_location,
+      to: r.to_location,
+      when: r.depart_date,
+      start_time: r.depart_time,
+      price_inr: r.price_inr,
+      seats_total: r.seats_total,
+      seats_available: r.seats_available,
+      is_commercial: r.is_commercial,
+      pool: r.pool,
+      status: r.status,
+    }));
+
+    res.json(items);
+  } catch (e) {
+    res.status(400).json({ error: e.message || String(e) });
+  }
+});
+
+// ---------- INBOX (placeholder, no 404/401) ----------
+router.get('/messages', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'unauthorized' });
+
+    // Return empty list for now so the app doesn’t 404/500
+    res.json([]);
+  } catch (e) {
+    res.status(400).json({ error: e.message || String(e) });
+  }
+});
+
+// ---------- BOOKING REQUEST (stub – returns 200) ----------
+router.post('/:id/book', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ error: 'unauthorized' });
+
+    // You can implement actual booking here later
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message || String(e) });
   }
 });
 
