@@ -17,7 +17,8 @@ const path = require('path');
 const bodyParser = require('body-parser');
 const { supabaseUserClient, supabaseAdmin } = require('./config/supabase');
 const { requireAuth, attachUser } = require('./middleware/auth');
-
+const rides = require('./routes/rides.routes');
+const messages = require('./routes/messages.routes');
 const app = express();
 
 const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);

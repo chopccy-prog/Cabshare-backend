@@ -1,75 +1,89 @@
 // routes/messages.routes.js
 const express = require('express');
 const router = express.Router();
-const { supabase } = require('../config/supabase');
+const { supabase } = require('../supabase');
 
-function uidFromAuth(req) {
-  const auth = req.headers['authorization'] || '';
-  const m = /^Bearer\s+(.+)$/i.exec(auth);
-  if (!m) return null;
-  try {
-    const payload = JSON.parse(Buffer.from(m[1].split('.')[1], 'base64url').toString('utf8'));
-    return payload.sub || null;
-  } catch { return null; }
+function getUserId(req) {
+  return (
+    req.header('x-user-id') ||
+    req.header('x-user') ||
+    (req.user && req.user.id) ||
+    null
+  );
 }
 
-// GET /messages
-// - inbox if no params
-// - thread if ride_id & other_user_id
+// GET /messages  → last 100 messages involving me
 router.get('/', async (req, res) => {
   try {
-    const uid = uidFromAuth(req);
-    if (!uid) return res.status(401).json({ error: 'unauthorized' });
-
-    const { ride_id, other_user_id } = req.query;
-
-    if (ride_id && other_user_id) {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('id, ride_id, sender_id, recipient_id, text, created_at')
-        .eq('ride_id', ride_id)
-        .or(`and(sender_id.eq.${uid},recipient_id.eq.${other_user_id}),and(sender_id.eq.${other_user_id},recipient_id.eq.${uid})`)
-        .order('created_at', { ascending: true });
-
-      if (error) return res.status(400).json({ error: error.message });
-      return res.json({ items: data || [] });
-    }
+    const me = getUserId(req);
+    if (!me) return res.status(401).json({ error: 'unauthorized' });
 
     const { data, error } = await supabase
       .from('messages')
-      .select('id, ride_id, sender_id, recipient_id, text, created_at')
-      .or(`sender_id.eq.${uid},recipient_id.eq.${uid}`)
+      .select('*')
+      .or(`sender_id.eq.${me},recipient_id.eq.${me}`)
       .order('created_at', { ascending: false })
-      .limit(50);
+      .limit(100);
 
     if (error) return res.status(400).json({ error: error.message });
-    return res.json({ items: data || [] });
+    return res.json(data || []);
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: `${e}` });
   }
 });
 
-// POST /messages  { ride_id?, recipient_id, text }
+// GET /messages/thread?ride_id=&other_user_id=
+router.get('/thread', async (req, res) => {
+  try {
+    const me = getUserId(req);
+    if (!me) return res.status(401).json({ error: 'unauthorized' });
+
+    const rideId = req.query.ride_id;
+    const other = req.query.other_user_id;
+
+    let q = supabase.from('messages').select('*');
+    if (rideId) q = q.eq('ride_id', rideId);
+
+    q = q.or(
+      `and(sender_id.eq.${me},recipient_id.eq.${other}),and(sender_id.eq.${other},recipient_id.eq.${me})`
+    );
+    q = q.order('created_at', { ascending: true });
+
+    const { data, error } = await q;
+    if (error) return res.status(400).json({ error: error.message });
+    return res.json(data || []);
+  } catch (e) {
+    return res.status(500).json({ error: `${e}` });
+  }
+});
+
+// POST /messages  { ride_id, recipient_id, text }
 router.post('/', async (req, res) => {
   try {
-    const uid = uidFromAuth(req);
-    if (!uid) return res.status(401).json({ error: 'unauthorized' });
+    const me = getUserId(req);
+    if (!me) return res.status(401).json({ error: 'unauthorized' });
 
-    const b = req.body || {};
-    if (!b.recipient_id || !b.text) {
-      return res.status(400).json({ error: 'recipient_id and text are required' });
-    }
+    const { ride_id, recipient_id, text } = req.body || {};
+    if (!recipient_id || !text)
+      return res
+        .status(400)
+        .json({ error: 'recipient_id and text are required' });
 
     const { data, error } = await supabase
       .from('messages')
-      .insert([{ ride_id: b.ride_id || null, sender_id: uid, recipient_id: b.recipient_id, text: b.text }])
-      .select('id')
+      .insert({
+        ride_id: ride_id ?? null,
+        sender_id: me,
+        recipient_id,
+        text,
+      })
+      .select('*')
       .single();
 
     if (error) return res.status(400).json({ error: error.message });
-    return res.json({ ok: true, id: data?.id || null });
+    return res.json(data);
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: `${e}` });
   }
 });
 
