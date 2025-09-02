@@ -1,65 +1,28 @@
-/**
- * Cabshare Backend (Drop-in)
- * - Express API that forwards Supabase user JWT to DB (RLS enforced)
- * - Minimal, production-ready structure for rides, bookings, inbox, admin
- * ENV:
- *  - PORT=3000
- *  - SUPABASE_URL=...
- *  - SUPABASE_ANON_KEY=...            (client anon key for user-bound ops)
- *  - SUPABASE_SERVICE_ROLE=...        (service role for admin/maintenance only)
- *  - CORS_ORIGIN=http://localhost:5173,http://localhost:3000,http://localhost:8080
- */
+// server.js
 require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
-const path = require('path');
-const bodyParser = require('body-parser');
-const { supabaseUserClient, supabaseAdmin } = require('./config/supabase');
-const { requireAuth, attachUser } = require('./middleware/auth');
-const rides = require('./routes/rides.routes');
-const messages = require('./routes/messages.routes');
+
+// health check expects /health on port 3000
+const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
+
 const app = express();
-
-const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean);
-app.use(cors({
-  origin: function (origin, cb) {
-    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) return cb(null, true);
-    return cb(new Error('Not allowed by CORS: ' + origin));
-  },
-  credentials: true
-}));
-app.use(bodyParser.json({ limit: '1mb' }));
+app.use(cors());
+app.use(express.json());         // <-- critical for depart_date etc.
 app.use(morgan('dev'));
+
+// mount routes
+const ridesRouter = require('./routes/rides.routes');
+app.use('/rides', ridesRouter);
+
+// health endpoint (you confirmed this is what you call)
 app.get('/health', (_req, res) => res.json({ ok: true }));
-app.use(express.static(path.join(__dirname, 'public')));
-// Optional: convenience redirect
-app.get('/admin-ui', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
 
-// Health
-app.get('/api', (req, res) => res.json({ ok: true, name: 'Cabshare API', ts: new Date().toISOString() }));
+// 404 fallback LAST
+app.use((_req, res) => res.status(404).json({ error: 'not_found' }));
 
-// Mount routes
-app.use('/rides', attachUser, require('./routes/rides.routes'));
-app.use('/bookings', attachUser, require('./routes/bookings.routes'));
-app.use('/inbox', attachUser, require('./routes/inbox.routes'));
-app.use('/admin', attachUser, requireAuth, require('./routes/admin.routes')); // admin-like tasks
-app.use('/users', attachUser, require('./routes/users.routes'));
-app.use('/debug', attachUser, require('./routes/debug.routes'));
-app.use('/messages', require('./routes/messages.routes'));   
-// 404 JSON (never serve HTML)
-app.use((req, res) => res.status(404).json({ error: 'not_found', path: req.path }));
-
-// error JSON
-app.use((err, _req, res, _next) => {
-  console.error(err);
-  res.status(500).json({ error: err.message || 'server_error' });
-});
-
-// near the bottom where app.listen is called:
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server listening on http://0.0.0.0:${PORT}`);
+app.listen(PORT, () => {
+  console.log(`cabshare backend listening on :${PORT}`);
 });
