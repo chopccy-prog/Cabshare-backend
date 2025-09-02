@@ -1,28 +1,26 @@
 // server.js
 require('dotenv').config();
-
 const express = require('express');
 const cors = require('cors');
-const morgan = require('morgan');
-
-// health check expects /health on port 3000
-const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
+const bodyParser = require('body-parser');
 
 const app = express();
 app.use(cors());
-app.use(express.json());         // <-- critical for depart_date etc.
-app.use(morgan('dev'));
+app.use(bodyParser.json());
 
-// mount routes
-const ridesRouter = require('./routes/rides.routes');
-app.use('/rides', ridesRouter);
-
-// health endpoint (you confirmed this is what you call)
+// health
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-// 404 fallback LAST
-app.use((_req, res) => res.status(404).json({ error: 'not_found' }));
+// routes
+const ridesRoutes = require('./routes/rides.routes');
+app.use('/rides', ridesRoutes);
 
-app.listen(PORT, () => {
+// optional stubs so the app never 404s here
+app.get('/inbox', (_req, res) => res.json([]));
+app.get('/messages', (_req, res) => res.json([]));
+app.post('/messages', (_req, res) => res.json({ ok: true }));
+
+const PORT = process.env.PORT || 3000; // keep 3000 if that's what you use
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`cabshare backend listening on :${PORT}`);
 });
