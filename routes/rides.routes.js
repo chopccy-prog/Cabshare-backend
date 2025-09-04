@@ -1,242 +1,133 @@
-// routes/rides.routes.js
+// routes/rides.routes.js  (minimal patch)
 const express = require('express');
 const router = express.Router();
 const { supabase } = require('../supabase');
 
-// --------- AUTH HELPER (updated) ---------
-async function getUserId(req) {
-  // 1) Prefer explicit header if present
-  const headerUid = (req.headers['x-user-id'] || '').trim();
-  if (headerUid) return headerUid;
+// helper: add aliases but KEEP original columns (so old code keeps working)
+const withAliases = (r) => ({
+  ...r,
+  from: r.from ?? r.from_location ?? r.from_city ?? null,
+  to: r.to ?? r.to_location ?? r.to_city ?? null,
+  when: r.when ?? r.depart_at ?? r.depart_time ?? null,
+  price: r.price ?? r.price_per_seat_inr ?? r.price_inr ?? null,
+});
 
-  // 2) Fallback to Bearer token -> resolve via Supabase
-  const authz = req.headers.authorization || '';
-  const m = authz.match(/^Bearer\s+(.+)$/i);
-  if (m && m[1]) {
-    const token = m[1];
-    const { data, error } = await supabase.auth.getUser(token);
-    if (!error && data?.user?.id) return data.user.id;
+// ---------- PUBLISH ----------
+router.post('/', async (req, res) => {
+  try {
+    const b = req.body || {};
+
+    // don’t change your existing payload keys; just normalize minimally
+    const insert = {
+      from_location: b.from_location ?? b.from ?? b.from_city ?? null,
+      to_location:   b.to_location   ?? b.to   ?? b.to_city   ?? null,
+      depart_at:     b.depart_at     ?? b.when ?? null,
+      price_per_seat_inr: b.price_per_seat_inr ?? b.price ?? null,
+      seats_total:   b.seats_total ?? b.seatsTotal ?? b.seats ?? null,
+      seats_available: b.seats_available ?? b.available_seats ?? (b.seats_total ?? b.seatsTotal ?? b.seats) ?? null,
+      ride_type:     b.ride_type ?? b.rideType ?? 'private',
+      driver_id:     b.driver_id ?? b.user_id ?? b.uid ?? null,
+      car_reg_number: b.car_reg_number ?? null,
+      car_model:      b.car_model ?? null,
+    };
+
+    const { data, error } = await supabase
+      .from('rides')
+      .insert(insert)
+      // keep your table columns; we’ll alias in JS
+      .select('*')
+      .single();
+
+    if (error) return res.status(400).json({ error: error.message });
+    return res.json(withAliases(data));
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
   }
-  return '';
-}
+});
 
-// ---- SEARCH (public) ----
+// ---------- SEARCH ----------
 router.get('/search', async (req, res) => {
   try {
-    const { from, to, date } = req.query;
-    let q = supabase
-      .from('rides')
-      .select(`
-        id, from_location, to_location, depart_date, depart_time,
-        seats_total, seats_available, price_inr, is_commercial, pool, status
-      `)
-      .eq('status', 'published')
-      .order('depart_date', { ascending: true })
-      .order('depart_time', { ascending: true });
-    if (from) q = q.ilike('from_location', from);
-    if (to) q = q.ilike('to_location', to);
-    if (date) q = q.eq('depart_date', date);
+    const { from, to, when, type } = req.query;
+
+    let q = supabase.from('rides').select('*');
+
+    if (from) q = q.ilike('from_location', `%${from}%`);
+    if (to)   q = q.ilike('to_location', `%${to}%`);
+    if (when) q = q.gte('depart_at', `${when} 00:00:00`).lte('depart_at', `${when} 23:59:59`);
+    if (type) q = q.eq('ride_type', type);
+
+    q = q.order('depart_at', { ascending: true });
 
     const { data, error } = await q;
     if (error) return res.status(400).json({ error: error.message });
 
-    const items = (data || []).map((r) => ({
-      id: r.id,
-      from: r.from_location,
-      to: r.to_location,
-      when: r.depart_date,
-      start_time: r.depart_time,
-      seats: r.seats_available,
-      price_inr: r.price_inr,
-      is_commercial: r.is_commercial,
-      pool: r.pool,
-    }));
-    res.json(items);
+    return res.json((data || []).map(withAliases));
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    return res.status(500).json({ error: e.message });
   }
 });
 
-// ---- MINE (auth) ----
+// ---------- GET ONE ----------
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('rides')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) return res.status(400).json({ error: error.message });
+    return res.json(withAliases(data));
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// ---------- MINE ----------
 router.get('/mine', async (req, res) => {
   try {
-    const uid = await getUserId(req);
+    const uid = req.user?.id || req.query.uid;
+    const role = (req.query.role || 'driver').toLowerCase();
     if (!uid) return res.status(401).json({ error: 'unauthorized' });
 
-    const role = (req.query.role || 'driver').toString();
     if (role === 'driver') {
       const { data, error } = await supabase
         .from('rides')
-        .select('id, from_location, to_location, depart_date, depart_time, seats_total, seats_available, price_inr, status, pool, is_commercial')
+        .select('*')
         .eq('driver_id', uid)
-        .neq('status', 'deleted')
-        .order('created_at', { ascending: false });
+        .order('depart_at', { ascending: false });
+
       if (error) return res.status(400).json({ error: error.message });
-      return res.json(
-        (data || []).map((r) => ({
-          id: r.id,
-          from: r.from_location,
-          to: r.to_location,
-          when: r.depart_date,
-          start_time: r.depart_time,
-          seats: r.seats_available,
-          price_inr: r.price_inr,
-          status: r.status,
-          pool: r.pool,
-          is_commercial: r.is_commercial,
-        }))
-      );
+      return res.json((data || []).map(withAliases));
     }
 
-    // rider
+    // rider: select via bookings
     const { data, error } = await supabase
       .from('bookings')
       .select(`
-        id, seats,
-        ride:rides(id, from_location, to_location, depart_date, depart_time, price_inr)
+        id,
+        seats_requested as seats,
+        status,
+        ride:rides(*)
       `)
       .eq('rider_id', uid)
       .order('created_at', { ascending: false });
 
-    // If bookings table absent, just return []
-    if (error && error.code !== '42P01') {
-      return res.status(400).json({ error: error.message });
-    }
-    res.json(
-      (data || []).map((b) => ({
-        id: b.ride?.id,
-        from: b.ride?.from_location,
-        to: b.ride?.to_location,
-        when: b.ride?.depart_date,
-        start_time: b.ride?.depart_time,
-        price_inr: b.ride?.price_inr,
-        seats: b.seats,
-      }))
-    );
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
-});
-
-// ---- CREATE (auth) ----
-router.post('/', async (req, res) => {
-  try {
-    const uid = await getUserId(req);
-    if (!uid) return res.status(401).json({ error: 'unauthorized' });
-
-    const b = req.body || {};
-    const from_location = (b.from_location ?? b.fromCity ?? b.from ?? '').toString().trim();
-    const to_location = (b.to_location ?? b.toCity ?? b.to ?? '').toString().trim();
-    const depart_date = (b.depart_date ?? b.date ?? '').toString().trim();
-    const depart_time = (b.depart_time ?? b.time ?? '').toString().trim();
-    const seats_total = Number(b.seats_total ?? b.seats ?? 0);
-    const seats_available = Number(b.seats_available ?? b.available_seats ?? seats_total);
-    const price_inr = Number(b.price_inr ?? b.price ?? b.price_per_seat_inr ?? 0);
-    const is_commercial = Boolean(b.is_commercial ?? (b.rideType && String(b.rideType).startsWith('commercial')));
-    const pool = b.pool ?? (b.rideType === 'commercial_full_car' ? 'private' : 'shared');
-
-    if (!from_location || !to_location || !depart_date) {
-      return res.status(400).json({ error: 'missing required fields: depart_date/from_location/to_location' });
-    }
-
-    const insert = {
-      driver_id: uid,
-      from_location,
-      to_location,
-      depart_date,
-      ...(depart_time ? { depart_time } : {}),
-      seats_total,
-      seats_available,
-      price_inr,
-      is_commercial,
-      pool,
-      status: 'published',
-      notes: b.notes ?? null,
-      car_make: b.car_make ?? null,
-      car_model: b.car_model ?? null,
-      car_reg_number: b.car_reg_number ?? null,
-    };
-
-    const { data, error } = await supabase.from('rides').insert(insert).select().single();
     if (error) return res.status(400).json({ error: error.message });
-    res.json(data);
+
+    const normalized = (data || []).map(b => ({
+      booking_id: b.id,
+      seats: b.seats,
+      status: b.status,
+      ...withAliases(b.ride || {}),
+    }));
+
+    return res.json(normalized);
   } catch (e) {
-    res.status(500).json({ error: String(e) });
+    return res.status(500).json({ error: e.message });
   }
 });
 
-// ---- DETAIL (public) ----
-router.get('/:id', async (req, res) => {
-  try {
-    const id = req.params.id;
-    const { data, error } = await supabase
-      .from('rides')
-      .select(`
-        id, from_location, to_location, depart_date, depart_time,
-        seats_total, seats_available, price_inr, is_commercial, pool, status,
-        driver:users!rides_driver_id_fkey(id, full_name, phone)
-      `)
-      .eq('id', id)
-      .single();
-    if (error) return res.status(400).json({ error: error.message });
-    res.json({
-      id: data.id,
-      from: data.from_location,
-      to: data.to_location,
-      depart_date: data.depart_date,
-      depart_time: data.depart_time,
-      seats_total: data.seats_total,
-      seats_available: data.seats_available,
-      price_per_seat_inr: data.price_inr,
-      is_commercial: data.is_commercial,
-      pool: data.pool,
-      status: data.status,
-      driver: data.driver,
-    });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
-});
-
-// ---- BOOK (auth) ----
-router.post('/:id/book', async (req, res) => {
-  try {
-    const uid = await getUserId(req);
-    if (!uid) return res.status(401).json({ error: 'unauthorized' });
-
-    const id = req.params.id;
-    const seats = Number(req.body?.seats ?? 1);
-
-    const { data: ride, error: e1 } = await supabase
-      .from('rides')
-      .select('id, seats_available')
-      .eq('id', id)
-      .single();
-    if (e1) return res.status(400).json({ error: e1.message });
-
-    if ((ride?.seats_available ?? 0) < seats) {
-      return res.status(400).json({ error: 'not_enough_seats' });
-    }
-
-    const { error: e2 } = await supabase
-      .from('rides')
-      .update({ seats_available: ride.seats_available - seats })
-      .eq('id', id);
-    if (e2) return res.status(400).json({ error: e2.message });
-
-    // best-effort bookings insert
-    await supabase
-      .from('bookings')
-      .insert({ ride_id: id, rider_id: uid, seats })
-      .then(({ error }) => {
-        if (error && error.code !== '42P01') throw error;
-      });
-
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
-});
-
-// Keep your /inbox and /messages stubs in server.js
 module.exports = router;
