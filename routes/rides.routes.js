@@ -1,33 +1,29 @@
 // routes/rides.routes.js
 //
-// Updated implementation for Work Setu‑Cab Share backend.
+// Express router providing CRUD and search endpoints for rides.
 //
-// Key changes:
-//  - The "/mine" route is defined before the dynamic "/:id" route to avoid the
-//    Express routing bug that treated "mine" as a ride ID.
-//  - Insert statements map incoming payload keys to the actual Postgres columns
-//    defined in the `rides` table (see schema.sql).  We split `depart_at` into
-//    separate `depart_date` and `depart_time` columns if provided.
-//  - Search filters now operate on the existing `from`, `to`, and
-//    `depart_date` columns instead of non‑existent `*_location` columns.
-//  - A helper function `withAliases` attaches camelCase keys back onto the
-//    returned object so the Flutter app can continue to access
-//    `from_location`, `to_location`, etc. without breaking.
+// This version aligns with the Supabase schema defined in schema.sql.  It
+// maps camelCase or legacy keys from the client into the snake_case fields
+// used by Postgres.  It also normalizes responses so that both the
+// canonical and legacy field names are present, allowing older Flutter
+// screens to keep working while new screens can migrate to the canonical
+// fields.  The `/mine` endpoint handles both published rides (driver
+// role) and booked rides (rider role) and uses `seats_requested` from
+// the bookings table for rider bookings.
 
 const express = require('express');
 const router = express.Router();
 const { supabase } = require('../supabase');
 
-// -------------------------------------------------------------
-// Helper to normalize and alias ride fields in API responses.
-// This ensures both the legacy camelCase names (from_location,
-// to_location, depart_date, depart_time, etc.) and the actual
-// database column names are present on the returned JSON.  Downstream
-// clients may continue referencing the camelCase versions while new
-// code can switch to the canonical names.
+// -----------------------------------------------------------------------------
+// Helper: attach legacy aliases to a ride object.  Supabase returns column
+// names exactly as they exist in Postgres.  To maintain backward
+// compatibility with earlier versions of the Flutter app, we add fields
+// like `from_location`, `to_location`, `depart_date`, `depart_time`, etc.
+// Consumers can migrate to using the canonical names (`from`, `to`, etc.) at
+// their convenience.
 const withAliases = (r) => ({
   ...r,
-  // Provide legacy aliases for backwards compatibility.
   from_location: r.from ?? r.from_location ?? null,
   to_location: r.to ?? r.to_location ?? null,
   depart_date: r.depart_date ?? null,
@@ -38,17 +34,20 @@ const withAliases = (r) => ({
   ride_type: r.ride_type ?? r.pool ?? null,
 });
 
-// -------------------------------------------------------------
-// PUBLISH: POST /rides
+// -----------------------------------------------------------------------------
+// POST /rides
 //
-// Accepts a payload with a mixture of legacy keys (e.g. from_location)
-// and canonical keys (from, to, depart_date, depart_time, etc.), then
-// inserts a new ride into the database using the correct column names.
+// Publish a new ride.  Accepts mixed camelCase and snake_case keys from the
+// client and inserts into the `rides` table.  If `depart_at` is provided
+// ("YYYY-MM-DD" or "YYYY-MM-DD HH:mm"), it is split into separate
+// `depart_date` and `depart_time` columns.  The driver ID is taken from
+// `req.user.id` (set by Supabase auth middleware) or from `uid` in the
+// query string.
 router.post('/', async (req, res) => {
   try {
     const b = req.body || {};
 
-    // Split `depart_at` into separate date and time fields if provided.
+    // Split depart_at if provided
     let departDate = b.depart_date || null;
     let departTime = b.depart_time || null;
     if (!departDate && b.depart_at) {
@@ -57,9 +56,7 @@ router.post('/', async (req, res) => {
       departTime = parts[1] || null;
     }
 
-    // Map request properties into database columns.  We favour the
-    // canonical snake_case names but fall back to legacy/camelCase keys.
-    // Determine the driver ID from the authenticated user or an explicit uid
+    // Determine driver ID: use explicit value, then auth user, then uid query
     const uid = req.user?.id || req.query.uid;
 
     const insert = {
@@ -70,17 +67,8 @@ router.post('/', async (req, res) => {
       price_per_seat_inr: b.price_per_seat_inr || b.price || null,
       seats_total: b.seats_total || b.seats || null,
       seats_available:
-        b.seats_available ||
-        b.available_seats ||
-        b.seats_total ||
-        b.seats ||
-        null,
-      // Use provided ride_type if present; otherwise default to "private_pool" which is
-      // a valid enum value according to the schema.  Accept camelCase `rideType` as well.
+        b.seats_available || b.available_seats || b.seats_total || b.seats || null,
       ride_type: b.ride_type || b.rideType || 'private_pool',
-      // Prioritise any explicit driver_id sent by the client, then the authenticated
-      // user ID or uid query parameter.  Without this, driver_id would be null,
-      // causing rides not to appear under "Published" in the app.
       driver_id: b.driver_id || b.user_id || b.uid || uid || null,
       car_model: b.car_model || null,
       car_plate: b.car_plate || b.car_reg_number || null,
@@ -92,7 +80,6 @@ router.post('/', async (req, res) => {
       .insert(insert)
       .select('*')
       .single();
-
     if (error) return res.status(400).json({ error: error.message });
     return res.json(withAliases(data));
   } catch (e) {
@@ -100,26 +87,20 @@ router.post('/', async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
-// SEARCH: GET /rides/search
+// -----------------------------------------------------------------------------
+// GET /rides/search
 //
-// Query rides by from/to/date/type using the existing `rides` table
-// columns.  `when` is treated as the departure date (YYYY‑MM‑DD).  The
-// results are ordered by departure date and time ascending.
+// Search rides by origin, destination, date and type.  Uses ilike for
+// partial matches on `from` and `to`.  `when` filters by `depart_date`.
 router.get('/search', async (req, res) => {
   try {
     const { from, to, when, type } = req.query;
-
     let q = supabase.from('rides').select('*');
     if (from) q = q.ilike('from', `%${from}%`);
     if (to) q = q.ilike('to', `%${to}%`);
     if (when) q = q.eq('depart_date', when);
     if (type) q = q.eq('ride_type', type);
-
-    q = q
-      .order('depart_date', { ascending: true })
-      .order('depart_time', { ascending: true });
-
+    q = q.order('depart_date', { ascending: true }).order('depart_time', { ascending: true });
     const { data, error } = await q;
     if (error) return res.status(400).json({ error: error.message });
     return res.json((data || []).map(withAliases));
@@ -128,14 +109,13 @@ router.get('/search', async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
-// MINE: GET /rides/mine?role=driver|rider
+// -----------------------------------------------------------------------------
+// GET /rides/mine?role=driver|rider
 //
-// Returns the rides published by the current user (driver) or rides the
-// user has booked (rider).  This route must be defined before the
-// dynamic "/:id" route so that Express does not interpret "mine" as an
-// `id` parameter.  The current user is determined from `req.user?.id`
-// (decoded by Supabase middleware) or via the `uid` query parameter.
+// Return rides associated with the current user.  If role=driver (default),
+// return rides where driver_id = current user.  If role=rider, return rides
+// the user has booked by joining the bookings table.  Rider bookings use the
+// `seats_requested` column and map it to `seats` in the response.
 router.get('/mine', async (req, res) => {
   try {
     const uid = req.user?.id || req.query.uid;
@@ -153,18 +133,16 @@ router.get('/mine', async (req, res) => {
       return res.json((data || []).map(withAliases));
     }
 
-    // rider: join bookings to rides
+    // Rider role: join bookings to rides
     const { data, error } = await supabase
       .from('bookings')
-      .select(
-        `id, seats, status, ride:rides(*)`
-      )
+      .select(`id, seats_requested, status, ride:rides(*)`)
       .eq('rider_id', uid)
       .order('created_at', { ascending: false });
     if (error) return res.status(400).json({ error: error.message });
     const normalized = (data || []).map((b) => ({
       booking_id: b.id,
-      seats: b.seats ?? b.seats_requested,
+      seats: b.seats_requested,
       status: b.status,
       ...withAliases(b.ride || {}),
     }));
@@ -174,12 +152,10 @@ router.get('/mine', async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
-// GET ONE: GET /rides/:id
+// -----------------------------------------------------------------------------
+// GET /rides/:id
 //
-// Returns a single ride by its UUID.  This dynamic route must appear
-// after the more specific routes above (e.g. /mine) to avoid
-// collisions.
+// Retrieve a single ride by ID.
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
