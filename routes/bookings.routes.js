@@ -49,21 +49,55 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'ride_id and seats are required' });
     }
 
-    const { data, error } = await supabase
+    // Fetch the ride to determine seats_available and auto-confirm setting
+    const { data: ride, error: rideErr } = await supabase
+      .from('rides')
+      .select('id, allow_auto_confirm, seats_available, seats_total')
+      .eq('id', ride_id)
+      .single();
+    if (rideErr) return res.status(400).json({ error: rideErr.message });
+    if (!ride) return res.status(404).json({ error: 'ride not found' });
+    // Determine remaining seats; fall back to seats_total if seats_available is null
+    const seatsAvail = ride.seats_available ?? ride.seats_total ?? 0;
+    if (seats > seatsAvail) {
+      return res.status(400).json({ error: 'not enough seats available' });
+    }
+    // Auto-confirm booking if the ride allows it
+    let status = 'requested';
+    let newSeatsAvail = seatsAvail;
+    if (ride.allow_auto_confirm === true) {
+      status = 'confirmed';
+      newSeatsAvail = seatsAvail - seats;
+    }
+    // Insert the booking
+    const { data: booking, error: bookingErr } = await supabase
       .from('bookings')
       .insert({
         ride_id,
         rider_id: uid,
         seats_requested: seats,
-        status: 'requested',
+        status,
       })
-      .select(`
-        id, ride_id, rider_id, seats_requested as seats, status, created_at
-      `)
+      .select('id, ride_id, rider_id, seats_requested, status')
       .single();
-
-    if (error) return res.status(400).json({ error: error.message });
-    return res.json(data);
+    if (bookingErr) return res.status(400).json({ error: bookingErr.message });
+    // If auto-confirmed, update seats_available on the ride
+    if (status === 'confirmed') {
+      const { error: updErr } = await supabase
+        .from('rides')
+        .update({ seats_available: newSeatsAvail })
+        .eq('id', ride_id);
+      if (updErr) return res.status(400).json({ error: updErr.message });
+    }
+    // Return normalized booking record
+    const result = {
+      id: booking.id,
+      ride_id: booking.ride_id,
+      rider_id: booking.rider_id,
+      seats: booking.seats_requested,
+      status: booking.status,
+    };
+    return res.json(result);
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
@@ -80,31 +114,59 @@ router.get('/inbox', async (req, res) => {
     const uid = req.user?.id || req.query.uid;
     if (!uid) return res.status(401).json({ error: 'unauthorized' });
 
-    const { data, error } = await supabase
+    // Fetch bookings where the current user is the rider
+    const { data: riderBookings, error: riderErr } = await supabase
       .from('bookings')
       .select(
         `id, ride_id, seats_requested, status,
          ride:rides(*),
          rider:users!bookings_rider_id_fkey ( id, full_name, avatar_url )`
       )
-      // Return bookings where the current user is either the rider or the driver of the ride.
-      // To filter on a column in the related table, use the format table(column).eq.value
-      .or(`rider_id.eq.${uid},ride(driver_id).eq.${uid}`)
-      .order('created_at', { ascending: false });
+      .eq('rider_id', uid);
+    if (riderErr) return res.status(400).json({ error: riderErr.message });
 
-    if (error) return res.status(400).json({ error: error.message });
+    // Fetch rides owned by the current user
+    const { data: myRides, error: ridesErr } = await supabase
+      .from('rides')
+      .select('id')
+      .eq('driver_id', uid);
+    if (ridesErr) return res.status(400).json({ error: ridesErr.message });
+    const rideIds = (myRides || []).map((r) => r.id);
 
-    const normalized = (data || []).map((b) => ({
+    // Fetch bookings on those rides
+    let driverBookings = [];
+    if (rideIds.length > 0) {
+      const { data: drvData, error: drvErr } = await supabase
+        .from('bookings')
+        .select(
+          `id, ride_id, seats_requested, status,
+           ride:rides(*),
+           rider:users!bookings_rider_id_fkey ( id, full_name, avatar_url )`
+        )
+        .in('ride_id', rideIds);
+      if (drvErr) return res.status(400).json({ error: drvErr.message });
+      driverBookings = drvData || [];
+    }
+
+    // Combine rider and driver bookings, de-duplicating by booking ID
+    const finalBookings = {};
+    const addToMap = (list) => {
+      for (const b of list) {
+        finalBookings[b.id] = b;
+      }
+    };
+    addToMap(riderBookings);
+    addToMap(driverBookings);
+    const combined = Object.values(finalBookings);
+
+    const normalized = combined.map((b) => ({
       id: b.id,
       ride_id: b.ride_id,
-      // seats_requested is returned by the select.  Also support legacy
-      // property "seats" if present.
       seats: b.seats_requested ?? b.seats,
       status: b.status,
       rider: b.rider,
       ride: withAliases(b.ride || {}),
     }));
-
     return res.json(normalized);
   } catch (e) {
     return res.status(500).json({ error: e.message });
