@@ -5,7 +5,7 @@ const ridesRouter = require('./routes/rides.routes');
 const bookingsRouter = require('./routes/bookings.routes');
 const messagesRouter = require('./routes/messages.routes');
 const routesRouter = require('./routes/routes.routes');
-
+const profilesRouter = require('./routes/profiles.routes');
 
 const app = express();
 
@@ -13,6 +13,7 @@ const app = express();
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
+app.use('/profiles', profilesRouter);
 app.use('/routes', routesRouter);
 app.use(cors({ origin: true, credentials: false }));
 app.use(express.json());
