@@ -6,6 +6,12 @@ const bookingsRouter = require('./routes/bookings.routes');
 const messagesRouter = require('./routes/messages.routes');
 
 const app = express();
+
+// Add this health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
 app.use(cors({ origin: true, credentials: false }));
 app.use(express.json());
 app.use('/rides', ridesRouter);
