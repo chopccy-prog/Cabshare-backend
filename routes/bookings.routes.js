@@ -40,7 +40,7 @@ const withAliases = (r) => ({
 // explicitly.  Seats are stored in the `seats_requested` column.
 router.post('/', async (req, res) => {
   try {
-    const uid = req.user?.id || req.body.rider_id;
+    const uid = req.user?.id || req.body.rider_id || req.query.uid;
     if (!uid) return res.status(401).json({ error: 'unauthorized' });
 
     const { ride_id } = req.body;
@@ -75,10 +75,10 @@ router.post('/', async (req, res) => {
       .insert({
         ride_id,
         rider_id: uid,
-        seats_requested: seats,
+        seats: seats,
         status,
       })
-      .select('id, ride_id, rider_id, seats_requested, status')
+      .select('id, ride_id, rider_id, seats, status')
       .single();
     if (bookingErr) return res.status(400).json({ error: bookingErr.message });
     // If auto-confirmed, update seats_available on the ride
@@ -94,7 +94,7 @@ router.post('/', async (req, res) => {
       id: booking.id,
       ride_id: booking.ride_id,
       rider_id: booking.rider_id,
-      seats: booking.seats_requested,
+      seats: booking.seats,
       status: booking.status,
     };
     return res.json(result);
@@ -118,7 +118,7 @@ router.get('/inbox', async (req, res) => {
     const { data: riderBookings, error: riderErr } = await supabase
       .from('bookings')
       .select(
-        `id, ride_id, seats_requested, status,
+        `id, ride_id, seats, status,
          ride:rides(*),
          rider:users!bookings_rider_id_fkey ( id, full_name, avatar_url )`
       )
@@ -139,7 +139,7 @@ router.get('/inbox', async (req, res) => {
       const { data: drvData, error: drvErr } = await supabase
         .from('bookings')
         .select(
-          `id, ride_id, seats_requested, status,
+          `id, ride_id, seats, status,
            ride:rides(*),
            rider:users!bookings_rider_id_fkey ( id, full_name, avatar_url )`
         )
@@ -162,7 +162,7 @@ router.get('/inbox', async (req, res) => {
     const normalized = combined.map((b) => ({
       id: b.id,
       ride_id: b.ride_id,
-      seats: b.seats_requested ?? b.seats,
+      seats: b.seats ?? b.seats_requested,
       status: b.status,
       rider: b.rider,
       ride: withAliases(b.ride || {}),

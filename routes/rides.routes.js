@@ -157,14 +157,14 @@ router.get('/mine', async (req, res) => {
     const { data, error } = await supabase
       .from('bookings')
       .select(
-        `id, seats_requested, status, ride:rides(*)`
+        `id, seats, status, ride:rides(*)`
       )
       .eq('rider_id', uid)
       .order('created_at', { ascending: false });
     if (error) return res.status(400).json({ error: error.message });
     const normalized = (data || []).map((b) => ({
       booking_id: b.id,
-      seats: b.seats_requested ?? b.seats,
+      seats: b.seats ?? b.seats_requested,
       status: b.status,
       ...withAliases(b.ride || {}),
     }));
