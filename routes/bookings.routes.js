@@ -82,15 +82,14 @@ router.get('/inbox', async (req, res) => {
 
     const { data, error } = await supabase
       .from('bookings')
-      .select(`
-        id,
-        ride_id,
-        seats_requested as seats,
-        status,
-        ride:rides(*),
-        rider:users!bookings_rider_id_fkey ( id, full_name, avatar_url )
-      `)
-      .or(`rider_id.eq.${uid},ride.driver_id.eq.${uid}`)
+      .select(
+        `id, ride_id, seats_requested, status,
+         ride:rides(*),
+         rider:users!bookings_rider_id_fkey ( id, full_name, avatar_url )`
+      )
+      // Return bookings where the current user is either the rider or the driver of the ride.
+      // To filter on a column in the related table, use the format table(column).eq.value
+      .or(`rider_id.eq.${uid},ride(driver_id).eq.${uid}`)
       .order('created_at', { ascending: false });
 
     if (error) return res.status(400).json({ error: error.message });
@@ -98,7 +97,9 @@ router.get('/inbox', async (req, res) => {
     const normalized = (data || []).map((b) => ({
       id: b.id,
       ride_id: b.ride_id,
-      seats: b.seats,
+      // seats_requested is returned by the select.  Also support legacy
+      // property "seats" if present.
+      seats: b.seats_requested ?? b.seats,
       status: b.status,
       rider: b.rider,
       ride: withAliases(b.ride || {}),

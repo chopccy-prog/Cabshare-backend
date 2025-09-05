@@ -59,6 +59,9 @@ router.post('/', async (req, res) => {
 
     // Map request properties into database columns.  We favour the
     // canonical snake_case names but fall back to legacy/camelCase keys.
+    // Determine the driver ID from the authenticated user or an explicit uid
+    const uid = req.user?.id || req.query.uid;
+
     const insert = {
       from: b.from || b.from_location || b.from_city || null,
       to: b.to || b.to_location || b.to_city || null,
@@ -72,8 +75,13 @@ router.post('/', async (req, res) => {
         b.seats_total ||
         b.seats ||
         null,
-      ride_type: b.ride_type || b.rideType || 'private',
-      driver_id: b.driver_id || b.user_id || b.uid || null,
+      // Use provided ride_type if present; otherwise default to "private_pool" which is
+      // a valid enum value according to the schema.  Accept camelCase `rideType` as well.
+      ride_type: b.ride_type || b.rideType || 'private_pool',
+      // Prioritise any explicit driver_id sent by the client, then the authenticated
+      // user ID or uid query parameter.  Without this, driver_id would be null,
+      // causing rides not to appear under "Published" in the app.
+      driver_id: b.driver_id || b.user_id || b.uid || uid || null,
       car_model: b.car_model || null,
       car_plate: b.car_plate || b.car_reg_number || null,
       notes: b.notes || null,
@@ -149,19 +157,14 @@ router.get('/mine', async (req, res) => {
     const { data, error } = await supabase
       .from('bookings')
       .select(
-        `
-        id,
-        seats_requested as seats,
-        status,
-        ride:rides(*)
-      `
+        `id, seats_requested, status, ride:rides(*)`
       )
       .eq('rider_id', uid)
       .order('created_at', { ascending: false });
     if (error) return res.status(400).json({ error: error.message });
     const normalized = (data || []).map((b) => ({
       booking_id: b.id,
-      seats: b.seats,
+      seats: b.seats_requested ?? b.seats,
       status: b.status,
       ...withAliases(b.ride || {}),
     }));
