@@ -2,33 +2,29 @@
 //
 // Endpoints for reading and updating user profile information.  Profiles
 // are stored in the `profiles` table, with the same primary key as
-// `auth.users` (Supabase auth).  A profile is created on demand if it
-// doesn’t exist when the user fetches it.  Verification fields are
-// intended to be updated by an admin portal.
+// auth.users (Supabase auth).  A profile is created on demand if it
+// doesn’t exist when the user fetches it.
 
 const express = require('express');
 const router = express.Router();
 const { supabase } = require('../supabase');
 
 // GET /profiles/me
-//
-// Return the profile for the current user.  If no profile exists, a
-// default row is created with null values.  The user ID is taken
-// from `req.user.id` (decoded by Supabase middleware) or from the
-// `uid` query parameter.  If neither is present, returns 401.
+// Return the profile for the current user.  If none exists, create a blank one.
 router.get('/me', async (req, res) => {
   try {
     const uid = req.user?.id || req.query.uid;
     if (!uid) return res.status(401).json({ error: 'unauthorized' });
-    // Try to fetch existing profile
+
+    // Use maybeSingle() so Supabase will return the first row if multiple exist
     let { data: profile, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', uid)
-      .single();
+      .maybeSingle();
+
     // If no profile exists, insert a default row
     if (error && error.code === 'PGRST116') {
-      // Supabase error code for "No rows found"
       const { data: created, error: insertErr } = await supabase
         .from('profiles')
         .insert({ id: uid })
@@ -46,24 +42,20 @@ router.get('/me', async (req, res) => {
 });
 
 // PUT /profiles/me
-//
-// Update the current user’s profile.  Accepts JSON fields such as
-// `full_name`, `phone`, `address`, etc.  Only provided fields are
-// updated.  Verification fields (e.g. `is_aadhaar_verified`) are
-// intended to be modified by an admin and should not be set by the
-// client.
+// Update the current user’s profile.  Only supplied fields are changed.
 router.put('/me', async (req, res) => {
   try {
     const uid = req.user?.id || req.query.uid;
     if (!uid) return res.status(401).json({ error: 'unauthorized' });
+
     const updates = { ...req.body };
-    // Remove any disallowed keys (to prevent overriding verification statuses)
+    // Prevent override of restricted fields
     delete updates.id;
     delete updates.is_aadhaar_verified;
     delete updates.is_vehicle_verified;
     delete updates.is_license_verified;
     delete updates.is_doc_verified;
-    // Perform the update
+
     const { data, error } = await supabase
       .from('profiles')
       .update(updates)
@@ -71,6 +63,7 @@ router.put('/me', async (req, res) => {
       .select('*')
       .single();
     if (error) return res.status(400).json({ error: error.message });
+
     return res.json(data);
   } catch (e) {
     return res.status(500).json({ error: e.message });
