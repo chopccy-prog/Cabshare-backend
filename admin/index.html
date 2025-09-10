@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Cabshare Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+<!-- Prefer UMD; some CDNs expose window.Supabase not window.supabase -->
+<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
+
+<style>
+  :root { --bg:#faf7fb; --card:#ffffff; --text:#1f2937; --muted:#6b7280; --pri:#6d28d9; --ok:#059669; --warn:#d97706; --err:#dc2626; }
+  *{ box-sizing:border-box; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+  body{ margin:0; background:var(--bg); color:var(--text); }
+  header{ padding:16px 20px; border-bottom:1px solid #eee; background:#fff; display:flex; align-items:center; gap:12px; }
+  header h1 { font-size:18px; margin:0; }
+  .wrap{ max-width:1100px; margin:20px auto; padding:0 16px; }
+  .card{ background:var(--card); border:1px solid #eee; border-radius:14px; padding:16px; }
+  .row{ display:flex; gap:16px; align-items:flex-start; }
+  .col{ flex:1; }
+  h2{ font-size:16px; margin:0 0 10px 0; }
+  label{ display:block; font-size:12px; color:var(--muted); margin:8px 0 4px; }
+  input, select{ width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; }
+  button{ background:var(--pri); color:#fff; border:none; padding:10px 14px; border-radius:10px; cursor:pointer; }
+  button.ghost{ background:#fff; color:var(--pri); border:1px solid var(--pri); }
+  button.danger{ background:var(--err); }
+  table{ width:100%; border-collapse:collapse; }
+  th, td{ padding:10px; border-bottom:1px solid #eee; font-size:14px; vertical-align:top; }
+  .muted{ color:var(--muted); }
+  .stack{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .grid{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+  @media (max-width:900px){ .row{flex-direction:column;} .grid{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<header>
+  <h1>Cabshare Admin</h1>
+  <span id="info" class="muted"></span>
+  <div style="margin-left:auto" class="stack">
+    <button id="btn-config" class="ghost">Config</button>
+    <button id="btn-logout" class="ghost">Logout</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <!-- Config -->
+  <div id="config" class="card" style="display:none; margin-bottom:16px">
+    <h2>Supabase Config</h2>
+    <div class="grid">
+      <div>
+        <label>Supabase URL</label>
+        <input id="cfg-url" placeholder="https://....supabase.co">
+      </div>
+      <div>
+        <label>Anon key</label>
+        <input id="cfg-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+      </div>
+    </div>
+    <div class="stack" style="margin-top:10px">
+      <button id="cfg-save">Save</button>
+      <span class="muted">Stored in localStorage on this device.</span>
+    </div>
+  </div>
+
+  <!-- Auth -->
+  <div id="auth" class="card" style="margin-bottom:16px">
+    <h2>Sign in</h2>
+    <div class="grid">
+      <div>
+        <label>Email</label>
+        <input id="email" placeholder="admin@example.com">
+      </div>
+      <div>
+        <label>Password</label>
+        <input id="password" type="password" placeholder="••••••••">
+      </div>
+    </div>
+    <div class="stack" style="margin-top:10px">
+      <button id="signin">Sign in</button>
+      <span class="muted">Your account must be in <code>public.admins</code>.</span>
+    </div>
+  </div>
+
+  <!-- App -->
+  <div id="app" style="display:none">
+    <div class="row">
+      <!-- Stops -->
+      <div class="col card">
+        <h2>Stops (cities)</h2>
+        <div class="grid">
+          <div><label>City</label><input id="stop-city"></div>
+          <div><label>Name</label><input id="stop-name" placeholder="CBS / Sion / Wakad"></div>
+          <div><label>Lat</label><input id="stop-lat" placeholder="19.9975"></div>
+          <div><label>Lon</label><input id="stop-lon" placeholder="73.7898"></div>
+        </div>
+        <div class="stack" style="margin-top:10px">
+          <button id="stop-add">Add stop</button>
+          <span id="stop-msg" class="muted"></span>
+        </div>
+        <div style="margin-top:10px; max-height:260px; overflow:auto">
+          <table><thead><tr><th>City</th><th>Name</th><th>Lat</th><th>Lon</th><th></th></tr></thead><tbody id="stops-tbody"></tbody></table>
+        </div>
+      </div>
+
+      <!-- Routes -->
+      <div class="col card">
+        <h2>Routes</h2>
+        <div class="grid">
+          <div><label>Name/Title</label><input id="route-title" placeholder="Nashik–Ghoti–Thane–Sion"></div>
+          <div><label>Origin</label><input id="route-origin" placeholder="Nashik"></div>
+          <div><label>Destination</label><input id="route-destination" placeholder="Mumbai"></div>
+        </div>
+        <div class="stack" style="margin-top:10px">
+          <button id="route-add">Add route</button>
+          <span id="route-msg" class="muted"></span>
+        </div>
+        <div style="margin-top:10px; max-height:260px; overflow:auto">
+          <table><thead><tr><th>Title</th><th>Origin</th><th>Destination</th><th></th></tr></thead><tbody id="routes-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Map route_stops -->
+    <div class="card" style="margin:16px 0">
+      <h2>Map Stops to Route (order matters)</h2>
+      <div class="grid">
+        <div>
+          <label>Route</label>
+          <select id="map-route"></select>
+        </div>
+        <div>
+          <label>Add stop</label>
+          <select id="map-stop"></select>
+        </div>
+      </div>
+      <div class="stack" style="margin-top:10px">
+        <button id="map-add">Add to list</button>
+        <button id="map-clear" class="ghost">Clear list</button>
+        <button id="map-save">Save mapping</button>
+        <span class="muted">Reorder with ▲ / ▼</span>
+      </div>
+      <div style="margin-top:10px">
+        <table>
+          <thead><tr><th>#</th><th>City</th><th>Name</th><th></th></tr></thead>
+          <tbody id="map-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Profile verification -->
+    <div class="card" style="margin-bottom:30px">
+      <h2>Profiles (verify)</h2>
+      <div class="grid">
+        <div><label>Search text</label><input id="prof-q" placeholder="name / phone"></div>
+        <div class="stack" style="margin-top:24px">
+          <button id="prof-search">Search</button>
+        </div>
+      </div>
+      <div style="margin-top:10px; max-height:280px; overflow:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th><th>Phone</th><th class="muted">User ID</th>
+              <th>Aadhaar</th><th>Vehicle</th><th>License</th><th>Docs</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="prof-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Ensure SDK exists; if UMD failed, dynamically import ESM and expose window.supabase */
+(async function ensureSupabase(){
+  try {
+    if (!('supabase' in window) && !('Supabase' in window)) {
+      const mod = await import('https://esm.sh/@supabase/supabase-js@2.45.4?bundle');
+      window.supabase = mod.createClient ? mod : (mod.default || mod);
+    }
+  } catch (e) {
+    alert('Failed to load Supabase SDK. Check your network/AdBlock.\n' + (e?.message || e));
+  }
+})();
+</script>
+
+<script>
+(function(){
+  const SBglobal = () => window.supabase || window.Supabase || null;
+
+  // Wait until SDK available
+  function waitForSDK() {
+    return new Promise((resolve) => {
+      const t = setInterval(()=>{
+        if (SBglobal()?.createClient) { clearInterval(t); resolve(); }
+      }, 50);
+      setTimeout(()=>{ clearInterval(t); if (!SBglobal()?.createClient) alert('Supabase SDK did not load.'); }, 8000);
+    });
+  }
+
+  const state = { supabase: null, stops: [], routes: [], mapList: [] };
+  const qs  = (s)=>document.querySelector(s);
+  const qsa = (s)=>Array.from(document.querySelectorAll(s));
+
+  const cfg = {
+    get url(){ return localStorage.getItem('sb_url') || '' },
+    get key(){ return localStorage.getItem('sb_key') || '' },
+    set url(v){ localStorage.setItem('sb_url', v) },
+    set key(v){ localStorage.setItem('sb_key', v) }
+  };
+
+  function setInfo(t){ qs('#info').textContent = t || ''; }
+  function toast(el, msg){ el.textContent = msg; setTimeout(()=>el.textContent='', 2000); }
+
+  function ensureClient(){
+    const SB = SBglobal();
+    if (!SB) { alert('Supabase bundle not loaded.'); return null; }
+    if (!cfg.url || !cfg.key) { return null; }
+    state.supabase = SB.createClient(cfg.url, cfg.key);
+    return state.supabase;
+  }
+
+  function showConfig(show){
+    qs('#config').style.display = show ? '' : 'none';
+    qs('#cfg-url').value = cfg.url;
+    qs('#cfg-key').value = cfg.key;
+  }
+
+  async function afterLogin(){
+    qs('#auth').style.display = 'none';
+    qs('#app').style.display = '';
+    setInfo('Signed in');
+    await refreshStops();
+    await refreshRoutes();
+    fillSelects();
+  }
+
+  function fillSelects(){
+    const selR = qs('#map-route'); selR.innerHTML='';
+    state.routes.forEach(r=>{
+      const o=document.createElement('option');
+      o.value=r.id; o.textContent=r.title || `${r.origin} → ${r.destination}`;
+      selR.appendChild(o);
+    });
+    const selS = qs('#map-stop'); selS.innerHTML='';
+    state.stops.forEach(s=>{
+      const o=document.createElement('option');
+      o.value=s.id; o.textContent=`${s.city} • ${s.name}`;
+      selS.appendChild(o);
+    });
+  }
+
+  // UI actions
+  qs('#btn-config').onclick = ()=> showConfig(qs('#config').style.display==='none');
+  qs('#cfg-save').onclick = ()=>{ cfg.url=qs('#cfg-url').value.trim(); cfg.key=qs('#cfg-key').value.trim(); ensureClient(); showConfig(false); };
+  qs('#btn-logout').onclick = async ()=>{ if (state.supabase) await state.supabase.auth.signOut(); location.reload(); };
+  qs('#signin').onclick = async ()=>{
+    try{
+      await waitForSDK();
+      if (!ensureClient()) { alert('Set Supabase URL & Anon key in Config first.'); return; }
+      const email=qs('#email').value.trim(), password=qs('#password').value;
+      const { error } = await state.supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      // Optional visibility check (policy may block; we proceed anyway)
+      try { await state.supabase.from('admins').select('user_id').maybeSingle(); } catch(_) {}
+      await afterLogin();
+    }catch(e){ alert('Sign-in failed: ' + (e?.message || e)); }
+  };
+
+  // Data loads
+  async function refreshStops(){
+    const { data, error } = await state.supabase.from('stops').select('*').order('city').order('name');
+    if (error){ alert(error.message); return; }
+    state.stops = data || [];
+    const tb = qs('#stops-tbody'); tb.innerHTML='';
+    state.stops.forEach(s=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${s.city}</td><td>${s.name}</td><td>${s.lat ?? ''}</td><td>${s.lon ?? ''}</td>
+      <td class="stack"><button data-del="${s.id}" class="danger">Delete</button></td>`;
+      tb.appendChild(tr);
+    });
+    tb.querySelectorAll('button[data-del]').forEach(btn=>{
+      btn.onclick = async ()=>{
+        const id=btn.getAttribute('data-del');
+        const { error } = await state.supabase.from('stops').delete().eq('id', id);
+        if (error){ alert(error.message); return; }
+        await refreshStops(); fillSelects();
+      };
+    });
+  }
+
+  qs('#stop-add').onclick = async ()=>{
+    const city=qs('#stop-city').value.trim();
+    const name=qs('#stop-name').value.trim();
+    const lat=parseFloat(qs('#stop-lat').value || '0') || null;
+    const lon=parseFloat(qs('#stop-lon').value || '0') || null;
+    if (!city || !name){ alert('City and Name are required'); return; }
+    const { error } = await state.supabase.from('stops').insert({ city, name, lat, lon });
+    if (error){ alert(error.message); return; }
+    toast(qs('#stop-msg'),'Saved');
+    qs('#stop-city').value=''; qs('#stop-name').value=''; qs('#stop-lat').value=''; qs('#stop-lon').value='';
+    await refreshStops(); fillSelects();
+  };
+
+  async function refreshRoutes(){
+    const { data, error } = await state.supabase.from('routes').select('id,title,origin,destination').order('title');
+    if (error){ alert(error.message); return; }
+    state.routes = data || [];
+    const tb = qs('#routes-tbody'); tb.innerHTML='';
+    state.routes.forEach(r=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${r.title ?? ''}</td><td>${r.origin ?? ''}</td><td>${r.destination ?? ''}</td>
+      <td class="stack"><button data-del="${r.id}" class="danger">Delete</button></td>`;
+      tb.appendChild(tr);
+    });
+    tb.querySelectorAll('button[data-del]').forEach(btn=>{
+      btn.onclick = async ()=>{
+        const id=btn.getAttribute('data-del');
+        await state.supabase.from('route_stops').delete().eq('route_id', id);
+        const { error } = await state.supabase.from('routes').delete().eq('id', id);
+        if (error){ alert(error.message); return; }
+        await refreshRoutes(); fillSelects();
+      };
+    });
+  }
+
+  qs('#route-add').onclick = async ()=>{
+    const title=qs('#route-title').value.trim();
+    const origin=qs('#route-origin').value.trim();
+    const destination=qs('#route-destination').value.trim();
+    if (!title || !origin || !destination){ alert('Title, origin, destination are required'); return; }
+    const { error } = await state.supabase.from('routes').insert({ title, origin, destination, name: title });
+    if (error){ alert(error.message); return; }
+    toast(qs('#route-msg'),'Saved');
+    qs('#route-title').value=''; qs('#route-origin').value=''; qs('#route-destination').value='';
+    await refreshRoutes(); fillSelects();
+  };
+
+  // Mapping
+  function renderMapList(){
+    const tb=qs('#map-tbody'); tb.innerHTML='';
+    state.mapList.forEach((s,idx)=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${idx+1}</td><td>${s.city}</td><td>${s.name}</td>
+        <td class="stack">
+          <button data-up="${idx}">▲</button>
+          <button data-down="${idx}">▼</button>
+          <button data-del="${idx}" class="danger">Remove</button>
+        </td>`;
+      tb.appendChild(tr);
+    });
+    tb.querySelectorAll('button[data-up]').forEach(b=> b.onclick=()=>{ const i=+b.dataset.up; if(i>0){ const t=state.mapList[i-1]; state.mapList[i-1]=state.mapList[i]; state.mapList[i]=t; renderMapList(); }});
+    tb.querySelectorAll('button[data-down]').forEach(b=> b.onclick=()=>{ const i=+b.dataset.down; if(i<state.mapList.length-1){ const t=state.mapList[i+1]; state.mapList[i+1]=state.mapList[i]; state.mapList[i]=t; renderMapList(); }});
+    tb.querySelectorAll('button[data-del]').forEach(b=> b.onclick=()=>{ const i=+b.dataset.del; state.mapList.splice(i,1); renderMapList(); });
+  }
+
+  qs('#map-add').onclick = ()=>{
+    const stopId=qs('#map-stop').value;
+    const s=state.stops.find(x=>x.id===stopId);
+    if (!s) return;
+    if (state.mapList.some(x=>x.id===s.id)) return;
+    state.mapList.push({ id:s.id, city:s.city, name:s.name });
+    renderMapList();
+  };
+  qs('#map-clear').onclick = ()=>{ state.mapList=[]; renderMapList(); };
+
+  qs('#map-save').onclick = async ()=>{
+    const routeId = qs('#map-route').value;
+    if (!routeId){ alert('Pick a route'); return; }
+    const { error: e1 } = await state.supabase.from('route_stops').delete().eq('route_id', routeId);
+    if (e1){ alert(e1.message); return; }
+    for (let i=0;i<state.mapList.length;i++){
+      const s=state.mapList[i];
+      const payload={ route_id: routeId, stop_id: s.id, stop_name: s.name, stop_order: i+1, seq: i+1 };
+      const { error: e2 } = await state.supabase.from('route_stops').insert(payload);
+      if (e2){ alert(e2.message); return; }
+    }
+    alert('Mapping saved');
+  };
+
+  // Profiles
+  qs('#prof-search').onclick = async ()=>{
+    const q = qs('#prof-q').value.trim();
+    let query = state.supabase.from('profiles')
+      .select('user_id, full_name, phone, aadhaar_verified, vehicle_verified, license_verified, docs_verified')
+      .limit(50);
+    if (q) query = query.or(`full_name.ilike.%${q}%,phone.ilike.%${q}%`);
+    const { data, error } = await query;
+    if (error){ alert(error.message); return; }
+    const tb = qs('#prof-tbody'); tb.innerHTML='';
+    (data||[]).forEach(p=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`
+        <td>${p.full_name || ''}</td>
+        <td>${p.phone || ''}</td>
+        <td class="muted" style="font-size:12px">${p.user_id}</td>
+        <td><input type="checkbox" ${p.aadhaar_verified?'checked':''} data-f="aadhaar_verified"></td>
+        <td><input type="checkbox" ${p.vehicle_verified?'checked':''} data-f="vehicle_verified"></td>
+        <td><input type="checkbox" ${p.license_verified?'checked':''} data-f="license_verified"></td>
+        <td><input type="checkbox" ${p.docs_verified?'checked':''} data-f="docs_verified"></td>
+        <td><button class="ghost" data-save="${p.user_id}">Save</button></td>
+      `;
+      tb.appendChild(tr);
+      tr.querySelector('button[data-save]').onclick = async ()=>{
+        const fields = {};
+        tr.querySelectorAll('input[type=checkbox]').forEach(ch=> fields[ch.dataset.f] = ch.checked);
+        const { error } = await state.supabase.from('profiles').update(fields).eq('user_id', p.user_id);
+        if (error){ alert(error.message); return; }
+        alert('Saved');
+      };
+    });
+  };
+
+  // Init
+  showConfig(!cfg.url || !cfg.key);
+  if (cfg.url && cfg.key) ensureClient();
+})();
+</script>
+</body>
+</html>
