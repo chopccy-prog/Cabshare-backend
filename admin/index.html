@@ -1,6 +1,64 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <meta charset="utf-8" />
+  <title>CabShare Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --gap:14px; --muted:#6b7280; --border:#e5e7eb; --brand:#0ea5e9; --danger:#ef4444; }
+    *{box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#fafafa;color:#111827}
+    header{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--border);padding:12px 16px;z-index:5}
+    h1{margin:0;font-size:18px}
+    main{padding:18px 16px 60px;max-width:1200px;margin:0 auto}
+    section{background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:18px}
+    h2{margin:0 0 10px;font-size:16px}
+    .row{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--gap)}
+    .col-3{grid-column:span 3}.col-4{grid-column:span 4}.col-5{grid-column:span 5}.col-6{grid-column:span 6}.col-8{grid-column:span 8}.col-12{grid-column:span 12}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:#fff}
+    button{height:38px;padding:0 14px;border-radius:8px;border:1px solid var(--brand);background:var(--brand);color:#fff;cursor:pointer}
+    button.ghost{background:#fff;color:var(--brand)}
+    button.danger{background:var(--danger);border-color:var(--danger)}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    table{width:100%;border-collapse:collapse}
+    th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--border);font-size:14px;vertical-align:top}
+    .muted{color:var(--muted)}
+    .note{font-size:12px;color:var(--muted)}
+    .spacer{height:8px}
+    .tabs{display:flex;gap:8px;border-bottom:1px solid var(--border);margin-bottom:16px;background:#fff;position:sticky;top:57px;z-index:4;padding:8px}
+    .tab{padding:8px 12px;border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;background:#f9fafb;cursor:pointer}
+    .tab.active{background:#fff;border-bottom:1px solid #fff;font-weight:600}
+    .tabpanel{display:none}
+    .tabpanel.active{display:block}
+    details{border:1px dashed var(--border);padding:12px;border-radius:8px;background:#fcfcfc}
+    summary{cursor:pointer;font-weight:600;margin-bottom:8px}
+    .right{text-align:right}
+    .pill{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid var(--border);background:#f8fafc;font-size:12px}
+  </style>
+</head>
+<body>
+<header><h1>CabShare Admin</h1></header>
+<main>
+
+  <!-- Top tabs: 1) your existing page, 2) new data managers -->
+  <div class="tabs">
+    <div class="tab active" data-tab="legacy">Existing Admin</div>
+    <div class="tab" data-tab="data">Data Management (Cities / Routes / Stops)</div>
+    <div class="tab" data-tab="config">Config</div>
+  </div>
+
+  <!-- Legacy tab (YOUR CURRENT PAGE stays here) -->
+  <div id="legacy" class="tabpanel active">
+    <section>
+      <h2>Your existing Admin page</h2>
+      <p class="note">We did not remove any features. Paste your current/old admin HTML below and it will remain as-is.</p>
+      <div id="legacyMount" style="border:1px dashed var(--border);border-radius:8px;padding:12px;background:#fff">
+        <!-- PASTE YOUR EXISTING ADMIN HTML HERE -->
+        <!doctype html>
+<html lang="en">
+<head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Cabshare Admin</title>
@@ -418,6 +476,434 @@
   showConfig(!cfg.url || !cfg.key);
   if (cfg.url && cfg.key) ensureClient();
 })();
+</script>
+</body>
+</html>
+>
+        <!-- Example placeholder (remove this block when you paste yours): -->
+        <p class="muted">Paste the old admin content here so it appears exactly like before.</p>
+      </div>
+    </section>
+  </div>
+
+  <!-- Data Management tab -->
+  <div id="data" class="tabpanel">
+    <!-- Cities -->
+    <section>
+      <h2>Cities (shared by Search & Publish)</h2>
+      <div class="row">
+        <div class="col-5">
+          <label>City name</label>
+          <input id="cityName" placeholder="e.g. Pune" />
+        </div>
+        <div class="col-5">
+          <label>State / Region</label>
+          <input id="cityState" placeholder="e.g. Maharashtra" value="Maharashtra" />
+        </div>
+        <div class="col-2 toolbar" style="align-items:end;justify-content:flex-end">
+          <button id="addCity">Add</button>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="toolbar">
+        <button class="ghost" id="seedMH">Quick-seed Maharashtra</button>
+        <button class="ghost" id="refreshCities">Refresh</button>
+        <span class="note">This list feeds both mobile pickers (Search/Publish).</span>
+      </div>
+      <div class="spacer"></div>
+      <table id="citiesTable">
+        <thead><tr><th style="width:60px">ID</th><th>City</th><th>State</th><th class="right">Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Routes -->
+    <section>
+      <h2>Routes (city-to-city)</h2>
+      <div class="row">
+        <div class="col-4">
+          <label>From city</label>
+          <select id="routeFrom"></select>
+        </div>
+        <div class="col-4">
+          <label>To city</label>
+          <select id="routeTo"></select>
+        </div>
+        <div class="col-3">
+          <label>Route name / code</label>
+          <input id="routeName" placeholder="e.g. NH60-fast" />
+        </div>
+        <div class="col-1 toolbar" style="align-items:end;justify-content:flex-end">
+          <button id="addRoute">Add</button>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="toolbar">
+        <button class="ghost" id="refreshRoutes">Refresh</button>
+        <span class="note">Publishing can later pick a specific route among multiple between a pair (e.g., Nashik→Pune).</span>
+      </div>
+      <div class="spacer"></div>
+      <table id="routesTable">
+        <thead>
+          <tr>
+            <th style="width:60px">ID</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Name/Code</th>
+            <th class="right">Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- Sub-stops for selected route -->
+    <section>
+      <h2>Sub-stops (for a selected Route)</h2>
+      <div class="row">
+        <div class="col-6">
+          <label>Select route</label>
+          <select id="stopsRoute"></select>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="row">
+        <div class="col-3">
+          <label>Stop name</label>
+          <input id="stopName" placeholder="e.g. Chakan" />
+        </div>
+        <div class="col-3">
+          <label>Sequence (order)</label>
+          <input id="stopSeq" type="number" placeholder="1" />
+        </div>
+        <div class="col-3">
+          <label>Distance (km) – optional</label>
+          <input id="stopDist" type="number" step="0.1" />
+        </div>
+        <div class="col-3">
+          <label>ETA offset (mins) – optional</label>
+          <input id="stopEta" type="number" />
+        </div>
+        <div class="col-12 toolbar" style="justify-content:flex-end">
+          <button id="addStop">Add stop</button>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="toolbar">
+        <button class="ghost" id="refreshStops">Refresh</button>
+        <span class="note">These stops are used in booking pick/drop later.</span>
+      </div>
+      <div class="spacer"></div>
+      <table id="stopsTable">
+        <thead>
+          <tr>
+            <th style="width:60px">ID</th>
+            <th>Seq</th>
+            <th>Name</th>
+            <th>Distance</th>
+            <th>ETA +mins</th>
+            <th class="right">Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </div>
+
+  <!-- Config tab -->
+  <div id="config" class="tabpanel">
+    <section>
+      <h2>Config</h2>
+      <div class="row">
+        <div class="col-6">
+          <label>API Base (e.g. http://192.168.1.3:3000)</label>
+          <input id="apiBase" placeholder="http://localhost:3000" />
+          <div class="spacer"></div>
+          <div class="toolbar">
+            <button id="saveCfg">Save</button>
+            <button class="ghost" id="reload">Reload</button>
+            <span class="note">Stored in localStorage. Used for all actions above.</span>
+          </div>
+        </div>
+        <div class="col-6">
+          <details>
+            <summary>Opening via <code>file://</code></summary>
+            <div class="note">
+              If opened directly (file://…), enable CORS on your backend or serve this file from the backend
+              (e.g. as <code>/admin/index.html</code>).
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+  </div>
+
+</main>
+
+<script>
+/* ========================
+   Adjust endpoints here
+   ======================== */
+const API = {
+  cities: {
+    list:   () => '/admin/cities',
+    create: () => '/admin/cities',
+    del:    (id) => `/admin/cities/${encodeURIComponent(id)}`
+  },
+  routes: {
+    list:   () => '/admin/routes',                // GET
+    create: () => '/admin/routes',                // POST {from_city_id,to_city_id,name}
+    del:    (id) => `/admin/routes/${encodeURIComponent(id)}` // DELETE
+  },
+  stops: {
+    list:   (routeId) => `/admin/routes/${encodeURIComponent(routeId)}/stops`,
+    create: (routeId) => `/admin/routes/${encodeURIComponent(routeId)}/stops`,
+    del:    (routeId, stopId) => `/admin/routes/${encodeURIComponent(routeId)}/stops/${encodeURIComponent(stopId)}`
+  }
+};
+
+/* =========================
+   Tabs
+   ========================= */
+const tabButtons = document.querySelectorAll('.tab');
+const tabPanels  = document.querySelectorAll('.tabpanel');
+tabButtons.forEach(btn=>{
+  btn.onclick = ()=>{
+    tabButtons.forEach(b=>b.classList.remove('active'));
+    tabPanels.forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  };
+});
+
+/* =========================
+   Config
+   ========================= */
+const apiBaseInput = document.getElementById('apiBase');
+const saveCfgBtn   = document.getElementById('saveCfg');
+const reloadBtn    = document.getElementById('reload');
+
+const cfg = {
+  get apiBase() {
+    const fromQs = new URLSearchParams(location.search).get('api');
+    if (fromQs) return fromQs;
+    return localStorage.getItem('API_BASE') || 'http://localhost:3000';
+  },
+  set apiBase(v){ localStorage.setItem('API_BASE', v); }
+};
+apiBaseInput.value = cfg.apiBase;
+saveCfgBtn && (saveCfgBtn.onclick = ()=>{ cfg.apiBase = apiBaseInput.value.trim(); alert('Saved'); });
+reloadBtn  && (reloadBtn.onclick  = ()=>location.reload());
+
+async function fetchJSON(path, opts={}) {
+  const res = await fetch(cfg.apiBase + path, {
+    headers:{'Accept':'application/json','Content-Type':'application/json'},
+    ...opts
+  });
+  const txt = await res.text();
+  let data; try{ data = txt ? JSON.parse(txt) : null; } catch { data = txt; }
+  if (!res.ok) throw new Error((data && data.error) || txt || res.statusText);
+  return data;
+}
+const postJSON = (path, body) => fetchJSON(path, {method:'POST', body: JSON.stringify(body)});
+const del      = (path)        => fetchJSON(path, {method:'DELETE'});
+
+/* =========================
+   Cities
+   ========================= */
+const cityName    = document.getElementById('cityName');
+const cityState   = document.getElementById('cityState');
+const addCityBtn  = document.getElementById('addCity');
+const seedBtn     = document.getElementById('seedMH');
+const citiesTbody = document.querySelector('#citiesTable tbody');
+const refreshCitiesBtn = document.getElementById('refreshCities');
+const routeFromSel = document.getElementById('routeFrom');
+const routeToSel   = document.getElementById('routeTo');
+
+function fillCitySelect(select, list){
+  select.innerHTML = '<option value="">Select…</option>';
+  list.forEach(c=>{
+    const o = document.createElement('option');
+    o.value = c.id; o.textContent = `${c.name}${c.state ? ' — '+c.state:''}`;
+    select.appendChild(o);
+  });
+}
+
+async function loadCities(){
+  try{
+    citiesTbody.innerHTML = '<tr><td colspan="4" class="muted">Loading…</td></tr>';
+    const list = await fetchJSON(API.cities.list());
+    renderCities(list||[]);
+    fillCitySelect(routeFromSel, list||[]);
+    fillCitySelect(routeToSel,   list||[]);
+  }catch(e){
+    citiesTbody.innerHTML = `<tr><td colspan="4" class="muted">Failed: ${e.message}</td></tr>`;
+  }
+}
+function renderCities(list){
+  if(!Array.isArray(list) || !list.length){
+    citiesTbody.innerHTML = '<tr><td colspan="4" class="muted">No cities</td></tr>'; return;
+  }
+  citiesTbody.innerHTML = '';
+  list.forEach(c=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${c.id ?? ''}</td>
+      <td>${c.name ?? ''}</td>
+      <td>${c.state ?? ''}</td>
+      <td class="right"><button class="danger">Delete</button></td>`;
+    tr.querySelector('button').onclick = async ()=>{
+      if(!confirm('Delete city?')) return;
+      try{ await del(API.cities.del(c.id)); await loadCities(); }
+      catch(e){ alert('Delete failed: '+e.message); }
+    };
+    citiesTbody.appendChild(tr);
+  });
+}
+addCityBtn && (addCityBtn.onclick = async ()=>{
+  const name = (cityName.value||'').trim();
+  const state= (cityState.value||'').trim();
+  if(!name) return alert('City name required');
+  try{
+    await postJSON(API.cities.create(), {name, state});
+    cityName.value=''; await loadCities();
+  }catch(e){ alert('Add failed: '+e.message); }
+});
+seedBtn && (seedBtn.onclick = async ()=>{
+  if(!confirm('Seed common Maharashtra cities?')) return;
+  const mh = ['Mumbai','Pune','Nagpur','Nashik','Thane','Chhatrapati Sambhajinagar','Navi Mumbai','Solapur','Kolhapur','Amravati','Sangli','Latur','Akola'];
+  try{
+    for(const n of mh){ await postJSON(API.cities.create(), {name:n, state:'Maharashtra'}); }
+    await loadCities(); alert('Seeded Maharashtra cities');
+  }catch(e){ alert('Seed failed: '+e.message); }
+});
+refreshCitiesBtn && (refreshCitiesBtn.onclick = loadCities);
+
+/* =========================
+   Routes
+   ========================= */
+const routeName   = document.getElementById('routeName');
+const addRouteBtn = document.getElementById('addRoute');
+const routesTbody = document.querySelector('#routesTable tbody');
+const refreshRoutesBtn = document.getElementById('refreshRoutes');
+const stopsRouteSel = document.getElementById('stopsRoute');
+
+async function loadRoutes(){
+  routesTbody.innerHTML = '<tr><td colspan="5" class="muted">Loading…</td></tr>';
+  try{
+    const list = await fetchJSON(API.routes.list());
+    renderRoutes(list||[]);
+    // Fill stops’ route selector
+    stopsRouteSel.innerHTML = '<option value="">Select route…</option>';
+    (list||[]).forEach(r=>{
+      const o = document.createElement('option');
+      o.value = r.id; o.textContent = `[${r.id}] ${r.from_city_name ?? r.from_city_id} → ${r.to_city_name ?? r.to_city_id} (${r.name||'no name'})`;
+      stopsRouteSel.appendChild(o);
+    });
+  }catch(e){
+    routesTbody.innerHTML = `<tr><td colspan="5" class="muted">Failed: ${e.message}</td></tr>`;
+  }
+}
+function renderRoutes(list){
+  if(!Array.isArray(list) || !list.length){
+    routesTbody.innerHTML = '<tr><td colspan="5" class="muted">No routes</td></tr>'; return;
+  }
+  routesTbody.innerHTML = '';
+  list.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.id ?? ''}</td>
+      <td>${r.from_city_name ?? r.from_city_id}</td>
+      <td>${r.to_city_name ?? r.to_city_id}</td>
+      <td>${r.name ?? ''}</td>
+      <td class="right"><button class="danger">Delete</button></td>`;
+    tr.querySelector('button').onclick = async ()=>{
+      if(!confirm('Delete route?')) return;
+      try{ await del(API.routes.del(r.id)); await loadRoutes(); }
+      catch(e){ alert('Delete failed: '+e.message); }
+    };
+    routesTbody.appendChild(tr);
+  });
+}
+addRouteBtn && (addRouteBtn.onclick = async ()=>{
+  const fromId = routeFromSel.value; const toId = routeToSel.value; const name = (routeName.value||'').trim();
+  if(!fromId || !toId) return alert('Select From and To');
+  try{
+    await postJSON(API.routes.create(), { from_city_id: Number(fromId), to_city_id: Number(toId), name });
+    routeName.value = ''; await loadRoutes();
+  }catch(e){ alert('Add route failed: '+e.message); }
+});
+refreshRoutesBtn && (refreshRoutesBtn.onclick = loadRoutes);
+
+/* =========================
+   Sub-stops
+   ========================= */
+const stopName = document.getElementById('stopName');
+const stopSeq  = document.getElementById('stopSeq');
+const stopDist = document.getElementById('stopDist');
+const stopEta  = document.getElementById('stopEta');
+const addStopBtn = document.getElementById('addStop');
+const stopsTbody = document.querySelector('#stopsTable tbody');
+const refreshStopsBtn = document.getElementById('refreshStops');
+
+async function loadStops(){
+  const r = stopsRouteSel.value;
+  if(!r){ stopsTbody.innerHTML = '<tr><td colspan="6" class="muted">Select a route above</td></tr>'; return; }
+  stopsTbody.innerHTML = '<tr><td colspan="6" class="muted">Loading…</td></tr>';
+  try{
+    const list = await fetchJSON(API.stops.list(r));
+    renderStops(list||[]);
+  }catch(e){
+    stopsTbody.innerHTML = `<tr><td colspan="6" class="muted">Failed: ${e.message}</td></tr>`;
+  }
+}
+function renderStops(list){
+  if(!Array.isArray(list) || !list.length){
+    stopsTbody.innerHTML = '<tr><td colspan="6" class="muted">No stops</td></tr>'; return;
+  }
+  // sort by seq if backend didn’t
+  list.sort((a,b)=>(a.seq||0)-(b.seq||0));
+  stopsTbody.innerHTML = '';
+  list.forEach(s=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${s.id ?? ''}</td>
+      <td>${s.seq ?? ''}</td>
+      <td>${s.name ?? ''}</td>
+      <td>${s.distance_km ?? ''}</td>
+      <td>${s.eta_offset_min ?? ''}</td>
+      <td class="right"><button class="danger">Delete</button></td>`;
+    tr.querySelector('button').onclick = async ()=>{
+      if(!confirm('Delete stop?')) return;
+      try{ await del(API.stops.del(stopsRouteSel.value, s.id)); await loadStops(); }
+      catch(e){ alert('Delete failed: '+e.message); }
+    };
+    stopsTbody.appendChild(tr);
+  });
+}
+addStopBtn && (addStopBtn.onclick = async ()=>{
+  const routeId = stopsRouteSel.value;
+  if(!routeId) return alert('Select a route');
+  const payload = {
+    name: (stopName.value||'').trim(),
+    seq:  stopSeq.value ? Number(stopSeq.value) : null,
+    distance_km: stopDist.value ? Number(stopDist.value) : null,
+    eta_offset_min: stopEta.value ? Number(stopEta.value) : null
+  };
+  if(!payload.name) return alert('Stop name required');
+  try{
+    await postJSON(API.stops.create(routeId), payload);
+    stopName.value=''; stopSeq.value=''; stopDist.value=''; stopEta.value='';
+    await loadStops();
+  }catch(e){ alert('Add stop failed: '+e.message); }
+});
+stopsRouteSel && (stopsRouteSel.onchange = loadStops);
+refreshStopsBtn && (refreshStopsBtn.onclick = loadStops);
+
+/* =========================
+   Boot
+   ========================= */
+loadCities().then(loadRoutes).then(loadStops);
 </script>
 </body>
 </html>
