@@ -1,909 +1,681 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>CabShare Admin</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    :root { --gap:14px; --muted:#6b7280; --border:#e5e7eb; --brand:#0ea5e9; --danger:#ef4444; }
-    *{box-sizing:border-box}
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;background:#fafafa;color:#111827}
-    header{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--border);padding:12px 16px;z-index:5}
-    h1{margin:0;font-size:18px}
-    main{padding:18px 16px 60px;max-width:1200px;margin:0 auto}
-    section{background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:18px}
-    h2{margin:0 0 10px;font-size:16px}
-    .row{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--gap)}
-    .col-3{grid-column:span 3}.col-4{grid-column:span 4}.col-5{grid-column:span 5}.col-6{grid-column:span 6}.col-8{grid-column:span 8}.col-12{grid-column:span 12}
-    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
-    input,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:#fff}
-    button{height:38px;padding:0 14px;border-radius:8px;border:1px solid var(--brand);background:var(--brand);color:#fff;cursor:pointer}
-    button.ghost{background:#fff;color:var(--brand)}
-    button.danger{background:var(--danger);border-color:var(--danger)}
-    button:disabled{opacity:.6;cursor:not-allowed}
-    .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    table{width:100%;border-collapse:collapse}
-    th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--border);font-size:14px;vertical-align:top}
-    .muted{color:var(--muted)}
-    .note{font-size:12px;color:var(--muted)}
-    .spacer{height:8px}
-    .tabs{display:flex;gap:8px;border-bottom:1px solid var(--border);margin-bottom:16px;background:#fff;position:sticky;top:57px;z-index:4;padding:8px}
-    .tab{padding:8px 12px;border:1px solid var(--border);border-bottom:none;border-radius:8px 8px 0 0;background:#f9fafb;cursor:pointer}
-    .tab.active{background:#fff;border-bottom:1px solid #fff;font-weight:600}
-    .tabpanel{display:none}
-    .tabpanel.active{display:block}
-    details{border:1px dashed var(--border);padding:12px;border-radius:8px;background:#fcfcfc}
-    summary{cursor:pointer;font-weight:600;margin-bottom:8px}
-    .right{text-align:right}
-    .pill{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid var(--border);background:#f8fafc;font-size:12px}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CabShare Admin Panel</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --primary: #0ea5e9;
+            --primary-dark: #0284c7;
+            --success: #10b981;
+            --danger: #ef4444;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --border: #e2e8f0;
+            --text: #1e293b;
+            --text-muted: #64748b;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui; background: var(--background); color: var(--text); }
+        .container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
+        .login-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); }
+        .login-card { background: var(--surface); padding: 2rem; border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        .login-card h1 { text-align: center; margin-bottom: 2rem; font-size: 1.5rem; }
+        .main-content { display: none; }
+        .header { display: flex; justify-content: space-between; align-items: center; background: var(--surface); padding: 1rem 2rem; border-radius: 8px; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .nav-tabs { display: flex; background: var(--surface); border-radius: 8px; padding: 0.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .nav-tab { flex: 1; text-align: center; padding: 0.75rem 1rem; border-radius: 6px; cursor: pointer; transition: all 0.2s; font-weight: 500; color: var(--text-muted); }
+        .nav-tab:hover { background: var(--border); }
+        .nav-tab.active { background: var(--primary); color: white; }
+        .card { background: var(--surface); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card h2, .card h3 { margin-bottom: 1rem; }
+        .form-group { margin-bottom: 1rem; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .form-actions { display: flex; gap: 1rem; margin-top: 1rem; }
+        .label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+        .input, .select { width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; }
+        .input:focus, .select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1); }
+        .btn { padding: 0.75rem 1rem; border: none; border-radius: 6px; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+        .btn-outline:hover { background: var(--border); }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-sm { padding: 0.5rem 0.75rem; font-size: 0.8rem; }
+        .table-container { overflow-x: auto; }
+        .table { width: 100%; border-collapse: collapse; }
+        .table th, .table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+        .table th { background: var(--background); font-weight: 600; }
+        .table tr:hover { background: var(--background); }
+        .table tr.clickable { cursor: pointer; }
+        .table tr.clickable:hover { background: #e0f2fe; }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card { background: var(--surface); padding: 1.5rem; border-radius: 8px; border-left: 4px solid var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .stat-value { font-size: 2rem; font-weight: bold; color: var(--primary); }
+        .stat-label { color: var(--text-muted); margin-top: 0.5rem; }
+        .hidden { display: none !important; }
+        .text-center { text-align: center; }
+        .mb-0 { margin-bottom: 0; }
+        .route-info { background: #e0f2fe; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
+        .stop-order { background: var(--primary); color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.8rem; }
+        .loading { text-align: center; padding: 2rem; color: var(--text-muted); }
+        .error { background: #fef2f2; color: var(--danger); padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
+        .success { background: #f0fdf4; color: var(--success); padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
+        @media (max-width: 768px) { .form-row { grid-template-columns: 1fr; } .nav-tabs { flex-direction: column; } }
+    </style>
 </head>
 <body>
-<header><h1>CabShare Admin</h1></header>
-<main>
-
-  <!-- Top tabs: 1) your existing page, 2) new data managers -->
-  <div class="tabs">
-    <div class="tab active" data-tab="legacy">Existing Admin</div>
-    <div class="tab" data-tab="data">Data Management (Cities / Routes / Stops)</div>
-    <div class="tab" data-tab="config">Config</div>
-  </div>
-
-  <!-- Legacy tab (YOUR CURRENT PAGE stays here) -->
-  <div id="legacy" class="tabpanel active">
-    <section>
-      <h2>Your existing Admin page</h2>
-      <p class="note">We did not remove any features. Paste your current/old admin HTML below and it will remain as-is.</p>
-      <div id="legacyMount" style="border:1px dashed var(--border);border-radius:8px;padding:12px;background:#fff">
-        <!-- PASTE YOUR EXISTING ADMIN HTML HERE -->
-        <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Cabshare Admin</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-
-<!-- Prefer UMD; some CDNs expose window.Supabase not window.supabase -->
-<script src="https://unpkg.com/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js" crossorigin="anonymous"></script>
-
-<style>
-  :root { --bg:#faf7fb; --card:#ffffff; --text:#1f2937; --muted:#6b7280; --pri:#6d28d9; --ok:#059669; --warn:#d97706; --err:#dc2626; }
-  *{ box-sizing:border-box; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
-  body{ margin:0; background:var(--bg); color:var(--text); }
-  header{ padding:16px 20px; border-bottom:1px solid #eee; background:#fff; display:flex; align-items:center; gap:12px; }
-  header h1 { font-size:18px; margin:0; }
-  .wrap{ max-width:1100px; margin:20px auto; padding:0 16px; }
-  .card{ background:var(--card); border:1px solid #eee; border-radius:14px; padding:16px; }
-  .row{ display:flex; gap:16px; align-items:flex-start; }
-  .col{ flex:1; }
-  h2{ font-size:16px; margin:0 0 10px 0; }
-  label{ display:block; font-size:12px; color:var(--muted); margin:8px 0 4px; }
-  input, select{ width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:10px; }
-  button{ background:var(--pri); color:#fff; border:none; padding:10px 14px; border-radius:10px; cursor:pointer; }
-  button.ghost{ background:#fff; color:var(--pri); border:1px solid var(--pri); }
-  button.danger{ background:var(--err); }
-  table{ width:100%; border-collapse:collapse; }
-  th, td{ padding:10px; border-bottom:1px solid #eee; font-size:14px; vertical-align:top; }
-  .muted{ color:var(--muted); }
-  .stack{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-  .grid{ display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
-  @media (max-width:900px){ .row{flex-direction:column;} .grid{grid-template-columns:1fr;} }
-</style>
-</head>
-<body>
-<header>
-  <h1>Cabshare Admin</h1>
-  <span id="info" class="muted"></span>
-  <div style="margin-left:auto" class="stack">
-    <button id="btn-config" class="ghost">Config</button>
-    <button id="btn-logout" class="ghost">Logout</button>
-  </div>
-</header>
-
-<div class="wrap">
-  <!-- Config -->
-  <div id="config" class="card" style="display:none; margin-bottom:16px">
-    <h2>Supabase Config</h2>
-    <div class="grid">
-      <div>
-        <label>Supabase URL</label>
-        <input id="cfg-url" placeholder="https://....supabase.co">
-      </div>
-      <div>
-        <label>Anon key</label>
-        <input id="cfg-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
-      </div>
-    </div>
-    <div class="stack" style="margin-top:10px">
-      <button id="cfg-save">Save</button>
-      <span class="muted">Stored in localStorage on this device.</span>
-    </div>
-  </div>
-
-  <!-- Auth -->
-  <div id="auth" class="card" style="margin-bottom:16px">
-    <h2>Sign in</h2>
-    <div class="grid">
-      <div>
-        <label>Email</label>
-        <input id="email" placeholder="admin@example.com">
-      </div>
-      <div>
-        <label>Password</label>
-        <input id="password" type="password" placeholder="••••••••">
-      </div>
-    </div>
-    <div class="stack" style="margin-top:10px">
-      <button id="signin">Sign in</button>
-      <span class="muted">Your account must be in <code>public.admins</code>.</span>
-    </div>
-  </div>
-
-  <!-- App -->
-  <div id="app" style="display:none">
-    <div class="row">
-      <!-- Stops -->
-      <div class="col card">
-        <h2>Stops (cities)</h2>
-        <div class="grid">
-          <div><label>City</label><input id="stop-city"></div>
-          <div><label>Name</label><input id="stop-name" placeholder="CBS / Sion / Wakad"></div>
-          <div><label>Lat</label><input id="stop-lat" placeholder="19.9975"></div>
-          <div><label>Lon</label><input id="stop-lon" placeholder="73.7898"></div>
+    <div id="loginContainer" class="login-container">
+        <div class="login-card">
+            <h1>🚗 CabShare Admin</h1>
+            <div id="loginError" class="error hidden"></div>
+            <form id="loginForm">
+                <div class="form-group"><label class="label">Supabase URL</label><input type="url" class="input" id="supabaseUrl" required></div>
+                <div class="form-group"><label class="label">Supabase Key</label><input type="password" class="input" id="supabaseKey" required></div>
+                <div class="form-group"><label class="label">Email</label><input type="email" class="input" id="loginEmail" required></div>
+                <div class="form-group"><label class="label">Password</label><input type="password" class="input" id="loginPassword" required></div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">Sign In</button>
+            </form>
         </div>
-        <div class="stack" style="margin-top:10px">
-          <button id="stop-add">Add stop</button>
-          <span id="stop-msg" class="muted"></span>
-        </div>
-        <div style="margin-top:10px; max-height:260px; overflow:auto">
-          <table><thead><tr><th>City</th><th>Name</th><th>Lat</th><th>Lon</th><th></th></tr></thead><tbody id="stops-tbody"></tbody></table>
-        </div>
-      </div>
-
-      <!-- Routes -->
-      <div class="col card">
-        <h2>Routes</h2>
-        <div class="grid">
-          <div><label>Name/Title</label><input id="route-title" placeholder="Nashik–Ghoti–Thane–Sion"></div>
-          <div><label>Origin</label><input id="route-origin" placeholder="Nashik"></div>
-          <div><label>Destination</label><input id="route-destination" placeholder="Mumbai"></div>
-        </div>
-        <div class="stack" style="margin-top:10px">
-          <button id="route-add">Add route</button>
-          <span id="route-msg" class="muted"></span>
-        </div>
-        <div style="margin-top:10px; max-height:260px; overflow:auto">
-          <table><thead><tr><th>Title</th><th>Origin</th><th>Destination</th><th></th></tr></thead><tbody id="routes-tbody"></tbody></table>
-        </div>
-      </div>
     </div>
 
-    <!-- Map route_stops -->
-    <div class="card" style="margin:16px 0">
-      <h2>Map Stops to Route (order matters)</h2>
-      <div class="grid">
-        <div>
-          <label>Route</label>
-          <select id="map-route"></select>
-        </div>
-        <div>
-          <label>Add stop</label>
-          <select id="map-stop"></select>
-        </div>
-      </div>
-      <div class="stack" style="margin-top:10px">
-        <button id="map-add">Add to list</button>
-        <button id="map-clear" class="ghost">Clear list</button>
-        <button id="map-save">Save mapping</button>
-        <span class="muted">Reorder with ▲ / ▼</span>
-      </div>
-      <div style="margin-top:10px">
-        <table>
-          <thead><tr><th>#</th><th>City</th><th>Name</th><th></th></tr></thead>
-          <tbody id="map-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Profile verification -->
-    <div class="card" style="margin-bottom:30px">
-      <h2>Profiles (verify)</h2>
-      <div class="grid">
-        <div><label>Search text</label><input id="prof-q" placeholder="name / phone"></div>
-        <div class="stack" style="margin-top:24px">
-          <button id="prof-search">Search</button>
-        </div>
-      </div>
-      <div style="margin-top:10px; max-height:280px; overflow:auto">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th><th>Phone</th><th class="muted">User ID</th>
-              <th>Aadhaar</th><th>Vehicle</th><th>License</th><th>Docs</th><th></th>
-            </tr>
-          </thead>
-          <tbody id="prof-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-/* Ensure SDK exists; if UMD failed, dynamically import ESM and expose window.supabase */
-(async function ensureSupabase(){
-  try {
-    if (!('supabase' in window) && !('Supabase' in window)) {
-      const mod = await import('https://esm.sh/@supabase/supabase-js@2.45.4?bundle');
-      window.supabase = mod.createClient ? mod : (mod.default || mod);
-    }
-  } catch (e) {
-    alert('Failed to load Supabase SDK. Check your network/AdBlock.\n' + (e?.message || e));
-  }
-})();
-</script>
-
-<script>
-(function(){
-  const SBglobal = () => window.supabase || window.Supabase || null;
-
-  // Wait until SDK available
-  function waitForSDK() {
-    return new Promise((resolve) => {
-      const t = setInterval(()=>{
-        if (SBglobal()?.createClient) { clearInterval(t); resolve(); }
-      }, 50);
-      setTimeout(()=>{ clearInterval(t); if (!SBglobal()?.createClient) alert('Supabase SDK did not load.'); }, 8000);
-    });
-  }
-
-  const state = { supabase: null, stops: [], routes: [], mapList: [] };
-  const qs  = (s)=>document.querySelector(s);
-  const qsa = (s)=>Array.from(document.querySelectorAll(s));
-
-  const cfg = {
-    get url(){ return localStorage.getItem('sb_url') || '' },
-    get key(){ return localStorage.getItem('sb_key') || '' },
-    set url(v){ localStorage.setItem('sb_url', v) },
-    set key(v){ localStorage.setItem('sb_key', v) }
-  };
-
-  function setInfo(t){ qs('#info').textContent = t || ''; }
-  function toast(el, msg){ el.textContent = msg; setTimeout(()=>el.textContent='', 2000); }
-
-  function ensureClient(){
-    const SB = SBglobal();
-    if (!SB) { alert('Supabase bundle not loaded.'); return null; }
-    if (!cfg.url || !cfg.key) { return null; }
-    state.supabase = SB.createClient(cfg.url, cfg.key);
-    return state.supabase;
-  }
-
-  function showConfig(show){
-    qs('#config').style.display = show ? '' : 'none';
-    qs('#cfg-url').value = cfg.url;
-    qs('#cfg-key').value = cfg.key;
-  }
-
-  async function afterLogin(){
-    qs('#auth').style.display = 'none';
-    qs('#app').style.display = '';
-    setInfo('Signed in');
-    await refreshStops();
-    await refreshRoutes();
-    fillSelects();
-  }
-
-  function fillSelects(){
-    const selR = qs('#map-route'); selR.innerHTML='';
-    state.routes.forEach(r=>{
-      const o=document.createElement('option');
-      o.value=r.id; o.textContent=r.title || `${r.origin} → ${r.destination}`;
-      selR.appendChild(o);
-    });
-    const selS = qs('#map-stop'); selS.innerHTML='';
-    state.stops.forEach(s=>{
-      const o=document.createElement('option');
-      o.value=s.id; o.textContent=`${s.city} • ${s.name}`;
-      selS.appendChild(o);
-    });
-  }
-
-  // UI actions
-  qs('#btn-config').onclick = ()=> showConfig(qs('#config').style.display==='none');
-  qs('#cfg-save').onclick = ()=>{ cfg.url=qs('#cfg-url').value.trim(); cfg.key=qs('#cfg-key').value.trim(); ensureClient(); showConfig(false); };
-  qs('#btn-logout').onclick = async ()=>{ if (state.supabase) await state.supabase.auth.signOut(); location.reload(); };
-  qs('#signin').onclick = async ()=>{
-    try{
-      await waitForSDK();
-      if (!ensureClient()) { alert('Set Supabase URL & Anon key in Config first.'); return; }
-      const email=qs('#email').value.trim(), password=qs('#password').value;
-      const { error } = await state.supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      // Optional visibility check (policy may block; we proceed anyway)
-      try { await state.supabase.from('admins').select('user_id').maybeSingle(); } catch(_) {}
-      await afterLogin();
-    }catch(e){ alert('Sign-in failed: ' + (e?.message || e)); }
-  };
-
-  // Data loads
-  async function refreshStops(){
-    const { data, error } = await state.supabase.from('stops').select('*').order('city').order('name');
-    if (error){ alert(error.message); return; }
-    state.stops = data || [];
-    const tb = qs('#stops-tbody'); tb.innerHTML='';
-    state.stops.forEach(s=>{
-      const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${s.city}</td><td>${s.name}</td><td>${s.lat ?? ''}</td><td>${s.lon ?? ''}</td>
-      <td class="stack"><button data-del="${s.id}" class="danger">Delete</button></td>`;
-      tb.appendChild(tr);
-    });
-    tb.querySelectorAll('button[data-del]').forEach(btn=>{
-      btn.onclick = async ()=>{
-        const id=btn.getAttribute('data-del');
-        const { error } = await state.supabase.from('stops').delete().eq('id', id);
-        if (error){ alert(error.message); return; }
-        await refreshStops(); fillSelects();
-      };
-    });
-  }
-
-  qs('#stop-add').onclick = async ()=>{
-    const city=qs('#stop-city').value.trim();
-    const name=qs('#stop-name').value.trim();
-    const lat=parseFloat(qs('#stop-lat').value || '0') || null;
-    const lon=parseFloat(qs('#stop-lon').value || '0') || null;
-    if (!city || !name){ alert('City and Name are required'); return; }
-    const { error } = await state.supabase.from('stops').insert({ city, name, lat, lon });
-    if (error){ alert(error.message); return; }
-    toast(qs('#stop-msg'),'Saved');
-    qs('#stop-city').value=''; qs('#stop-name').value=''; qs('#stop-lat').value=''; qs('#stop-lon').value='';
-    await refreshStops(); fillSelects();
-  };
-
-  async function refreshRoutes(){
-    const { data, error } = await state.supabase.from('routes').select('id,title,origin,destination').order('title');
-    if (error){ alert(error.message); return; }
-    state.routes = data || [];
-    const tb = qs('#routes-tbody'); tb.innerHTML='';
-    state.routes.forEach(r=>{
-      const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${r.title ?? ''}</td><td>${r.origin ?? ''}</td><td>${r.destination ?? ''}</td>
-      <td class="stack"><button data-del="${r.id}" class="danger">Delete</button></td>`;
-      tb.appendChild(tr);
-    });
-    tb.querySelectorAll('button[data-del]').forEach(btn=>{
-      btn.onclick = async ()=>{
-        const id=btn.getAttribute('data-del');
-        await state.supabase.from('route_stops').delete().eq('route_id', id);
-        const { error } = await state.supabase.from('routes').delete().eq('id', id);
-        if (error){ alert(error.message); return; }
-        await refreshRoutes(); fillSelects();
-      };
-    });
-  }
-
-  qs('#route-add').onclick = async ()=>{
-    const title=qs('#route-title').value.trim();
-    const origin=qs('#route-origin').value.trim();
-    const destination=qs('#route-destination').value.trim();
-    if (!title || !origin || !destination){ alert('Title, origin, destination are required'); return; }
-    const { error } = await state.supabase.from('routes').insert({ title, origin, destination, name: title });
-    if (error){ alert(error.message); return; }
-    toast(qs('#route-msg'),'Saved');
-    qs('#route-title').value=''; qs('#route-origin').value=''; qs('#route-destination').value='';
-    await refreshRoutes(); fillSelects();
-  };
-
-  // Mapping
-  function renderMapList(){
-    const tb=qs('#map-tbody'); tb.innerHTML='';
-    state.mapList.forEach((s,idx)=>{
-      const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${idx+1}</td><td>${s.city}</td><td>${s.name}</td>
-        <td class="stack">
-          <button data-up="${idx}">▲</button>
-          <button data-down="${idx}">▼</button>
-          <button data-del="${idx}" class="danger">Remove</button>
-        </td>`;
-      tb.appendChild(tr);
-    });
-    tb.querySelectorAll('button[data-up]').forEach(b=> b.onclick=()=>{ const i=+b.dataset.up; if(i>0){ const t=state.mapList[i-1]; state.mapList[i-1]=state.mapList[i]; state.mapList[i]=t; renderMapList(); }});
-    tb.querySelectorAll('button[data-down]').forEach(b=> b.onclick=()=>{ const i=+b.dataset.down; if(i<state.mapList.length-1){ const t=state.mapList[i+1]; state.mapList[i+1]=state.mapList[i]; state.mapList[i]=t; renderMapList(); }});
-    tb.querySelectorAll('button[data-del]').forEach(b=> b.onclick=()=>{ const i=+b.dataset.del; state.mapList.splice(i,1); renderMapList(); });
-  }
-
-  qs('#map-add').onclick = ()=>{
-    const stopId=qs('#map-stop').value;
-    const s=state.stops.find(x=>x.id===stopId);
-    if (!s) return;
-    if (state.mapList.some(x=>x.id===s.id)) return;
-    state.mapList.push({ id:s.id, city:s.city, name:s.name });
-    renderMapList();
-  };
-  qs('#map-clear').onclick = ()=>{ state.mapList=[]; renderMapList(); };
-
-  qs('#map-save').onclick = async ()=>{
-    const routeId = qs('#map-route').value;
-    if (!routeId){ alert('Pick a route'); return; }
-    const { error: e1 } = await state.supabase.from('route_stops').delete().eq('route_id', routeId);
-    if (e1){ alert(e1.message); return; }
-    for (let i=0;i<state.mapList.length;i++){
-      const s=state.mapList[i];
-      const payload={ route_id: routeId, stop_id: s.id, stop_name: s.name, stop_order: i+1, seq: i+1 };
-      const { error: e2 } = await state.supabase.from('route_stops').insert(payload);
-      if (e2){ alert(e2.message); return; }
-    }
-    alert('Mapping saved');
-  };
-
-  // Profiles
-  qs('#prof-search').onclick = async ()=>{
-    const q = qs('#prof-q').value.trim();
-    let query = state.supabase.from('profiles')
-      .select('user_id, full_name, phone, aadhaar_verified, vehicle_verified, license_verified, docs_verified')
-      .limit(50);
-    if (q) query = query.or(`full_name.ilike.%${q}%,phone.ilike.%${q}%`);
-    const { data, error } = await query;
-    if (error){ alert(error.message); return; }
-    const tb = qs('#prof-tbody'); tb.innerHTML='';
-    (data||[]).forEach(p=>{
-      const tr=document.createElement('tr');
-      tr.innerHTML=`
-        <td>${p.full_name || ''}</td>
-        <td>${p.phone || ''}</td>
-        <td class="muted" style="font-size:12px">${p.user_id}</td>
-        <td><input type="checkbox" ${p.aadhaar_verified?'checked':''} data-f="aadhaar_verified"></td>
-        <td><input type="checkbox" ${p.vehicle_verified?'checked':''} data-f="vehicle_verified"></td>
-        <td><input type="checkbox" ${p.license_verified?'checked':''} data-f="license_verified"></td>
-        <td><input type="checkbox" ${p.docs_verified?'checked':''} data-f="docs_verified"></td>
-        <td><button class="ghost" data-save="${p.user_id}">Save</button></td>
-      `;
-      tb.appendChild(tr);
-      tr.querySelector('button[data-save]').onclick = async ()=>{
-        const fields = {};
-        tr.querySelectorAll('input[type=checkbox]').forEach(ch=> fields[ch.dataset.f] = ch.checked);
-        const { error } = await state.supabase.from('profiles').update(fields).eq('user_id', p.user_id);
-        if (error){ alert(error.message); return; }
-        alert('Saved');
-      };
-    });
-  };
-
-  // Init
-  showConfig(!cfg.url || !cfg.key);
-  if (cfg.url && cfg.key) ensureClient();
-})();
-</script>
-</body>
-</html>
->
-        <!-- Example placeholder (remove this block when you paste yours): -->
-        <p class="muted">Paste the old admin content here so it appears exactly like before.</p>
-      </div>
-    </section>
-  </div>
-
-  <!-- Data Management tab -->
-  <div id="data" class="tabpanel">
-    <!-- Cities -->
-    <section>
-      <h2>Cities (shared by Search & Publish)</h2>
-      <div class="row">
-        <div class="col-5">
-          <label>City name</label>
-          <input id="cityName" placeholder="e.g. Pune" />
-        </div>
-        <div class="col-5">
-          <label>State / Region</label>
-          <input id="cityState" placeholder="e.g. Maharashtra" value="Maharashtra" />
-        </div>
-        <div class="col-2 toolbar" style="align-items:end;justify-content:flex-end">
-          <button id="addCity">Add</button>
-        </div>
-      </div>
-      <div class="spacer"></div>
-      <div class="toolbar">
-        <button class="ghost" id="seedMH">Quick-seed Maharashtra</button>
-        <button class="ghost" id="refreshCities">Refresh</button>
-        <span class="note">This list feeds both mobile pickers (Search/Publish).</span>
-      </div>
-      <div class="spacer"></div>
-      <table id="citiesTable">
-        <thead><tr><th style="width:60px">ID</th><th>City</th><th>State</th><th class="right">Actions</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </section>
-
-    <!-- Routes -->
-    <section>
-      <h2>Routes (city-to-city)</h2>
-      <div class="row">
-        <div class="col-4">
-          <label>From city</label>
-          <select id="routeFrom"></select>
-        </div>
-        <div class="col-4">
-          <label>To city</label>
-          <select id="routeTo"></select>
-        </div>
-        <div class="col-3">
-          <label>Route name / code</label>
-          <input id="routeName" placeholder="e.g. NH60-fast" />
-        </div>
-        <div class="col-1 toolbar" style="align-items:end;justify-content:flex-end">
-          <button id="addRoute">Add</button>
-        </div>
-      </div>
-      <div class="spacer"></div>
-      <div class="toolbar">
-        <button class="ghost" id="refreshRoutes">Refresh</button>
-        <span class="note">Publishing can later pick a specific route among multiple between a pair (e.g., Nashik→Pune).</span>
-      </div>
-      <div class="spacer"></div>
-      <table id="routesTable">
-        <thead>
-          <tr>
-            <th style="width:60px">ID</th>
-            <th>From</th>
-            <th>To</th>
-            <th>Name/Code</th>
-            <th class="right">Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
-
-    <!-- Sub-stops for selected route -->
-    <section>
-      <h2>Sub-stops (for a selected Route)</h2>
-      <div class="row">
-        <div class="col-6">
-          <label>Select route</label>
-          <select id="stopsRoute"></select>
-        </div>
-      </div>
-      <div class="spacer"></div>
-      <div class="row">
-        <div class="col-3">
-          <label>Stop name</label>
-          <input id="stopName" placeholder="e.g. Chakan" />
-        </div>
-        <div class="col-3">
-          <label>Sequence (order)</label>
-          <input id="stopSeq" type="number" placeholder="1" />
-        </div>
-        <div class="col-3">
-          <label>Distance (km) – optional</label>
-          <input id="stopDist" type="number" step="0.1" />
-        </div>
-        <div class="col-3">
-          <label>ETA offset (mins) – optional</label>
-          <input id="stopEta" type="number" />
-        </div>
-        <div class="col-12 toolbar" style="justify-content:flex-end">
-          <button id="addStop">Add stop</button>
-        </div>
-      </div>
-      <div class="spacer"></div>
-      <div class="toolbar">
-        <button class="ghost" id="refreshStops">Refresh</button>
-        <span class="note">These stops are used in booking pick/drop later.</span>
-      </div>
-      <div class="spacer"></div>
-      <table id="stopsTable">
-        <thead>
-          <tr>
-            <th style="width:60px">ID</th>
-            <th>Seq</th>
-            <th>Name</th>
-            <th>Distance</th>
-            <th>ETA +mins</th>
-            <th class="right">Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
-  </div>
-
-  <!-- Config tab -->
-  <div id="config" class="tabpanel">
-    <section>
-      <h2>Config</h2>
-      <div class="row">
-        <div class="col-6">
-          <label>API Base (e.g. http://192.168.1.3:3000)</label>
-          <input id="apiBase" placeholder="http://localhost:3000" />
-          <div class="spacer"></div>
-          <div class="toolbar">
-            <button id="saveCfg">Save</button>
-            <button class="ghost" id="reload">Reload</button>
-            <span class="note">Stored in localStorage. Used for all actions above.</span>
-          </div>
-        </div>
-        <div class="col-6">
-          <details>
-            <summary>Opening via <code>file://</code></summary>
-            <div class="note">
-              If opened directly (file://…), enable CORS on your backend or serve this file from the backend
-              (e.g. as <code>/admin/index.html</code>).
+    <div id="mainContent" class="main-content">
+        <div class="container">
+            <div class="header">
+                <h1>🚗 CabShare Admin Panel</h1>
+                <button id="logoutBtn" class="btn btn-outline">Logout</button>
             </div>
-          </details>
+
+            <nav class="nav-tabs">
+                <div class="nav-tab active" data-tab="dashboard">📊 Dashboard</div>
+                <div class="nav-tab" data-tab="cities-routes">🛣️ Cities & Routes</div>
+                <div class="nav-tab" data-tab="users">👥 Users</div>
+                <div class="nav-tab" data-tab="rides">🚗 Rides</div>
+                <div class="nav-tab" data-tab="financial">💰 Financial</div>
+            </nav>
+
+            <!-- Dashboard -->
+            <div id="dashboard" class="tab-panel active">
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-value" id="totalUsers">-</div><div class="stat-label">Total Users</div></div>
+                    <div class="stat-card"><div class="stat-value" id="totalRides">-</div><div class="stat-label">Total Rides</div></div>
+                    <div class="stat-card"><div class="stat-value" id="totalCities">-</div><div class="stat-label">Cities</div></div>
+                    <div class="stat-card"><div class="stat-value" id="totalRoutes">-</div><div class="stat-label">Routes</div></div>
+                </div>
+                <div class="card"><h3>Recent Activity</h3><div id="recentActivity" class="loading">Loading...</div></div>
+            </div>
+
+            <!-- Cities & Routes -->
+            <div id="cities-routes" class="tab-panel">
+                <div class="card">
+                    <h3>🏙️ Cities Management</h3>
+                    <div class="form-actions">
+                        <input type="text" id="newCityName" class="input" placeholder="City Name" style="flex: 1; margin-bottom: 0;">
+                        <input type="text" id="newCityState" class="input" placeholder="State" style="flex: 1; margin-bottom: 0;">
+                        <button onclick="addCity()" class="btn btn-primary">Add City</button>
+                    </div>
+                    <div class="table-container" style="margin-top: 1rem;">
+                        <table class="table">
+                            <thead><tr><th>City</th><th>State</th><th>Actions</th></tr></thead>
+                            <tbody id="citiesTable"><tr><td colspan="3" class="loading">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>🛣️ Routes Between Cities</h3>
+                    <div class="form-row">
+                        <div class="form-group mb-0"><label class="label">From City</label><select id="fromCitySelect" class="select"><option value="">Select From City</option></select></div>
+                        <div class="form-group mb-0"><label class="label">To City</label><select id="toCitySelect" class="select"><option value="">Select To City</option></select></div>
+                    </div>
+                    <div class="form-actions">
+                        <button onclick="loadRoutes()" class="btn btn-primary">Load Routes</button>
+                        <button onclick="showAddRouteForm()" class="btn btn-outline" id="addRouteBtn" style="display: none;">Add New Route</button>
+                    </div>
+
+                    <div id="addRouteForm" class="hidden" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                        <h4>Add New Route</h4>
+                        <div class="form-row">
+                            <div class="form-group"><label class="label">Route Name</label><input type="text" id="newRouteName" class="input" placeholder="Route Name"></div>
+                            <div class="form-group"><label class="label">Distance (km)</label><input type="number" id="newRouteDistance" class="input" step="0.1"></div>
+                        </div>
+                        <div class="form-actions">
+                            <button onclick="hideAddRouteForm()" class="btn btn-outline">Cancel</button>
+                            <button onclick="addRoute()" class="btn btn-primary">Add Route</button>
+                        </div>
+                    </div>
+
+                    <div class="table-container" style="margin-top: 1rem;">
+                        <table class="table">
+                            <thead><tr><th>Route Name</th><th>Distance</th><th>Stops</th><th>Actions</th></tr></thead>
+                            <tbody id="routesTable"><tr><td colspan="4" class="text-center">Select cities to view routes</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="stopsSection" class="card hidden">
+                    <div class="route-info">
+                        <h3>📍 Stops for Route: <span id="selectedRouteName">-</span></h3>
+                        <p><strong>Route:</strong> <span id="selectedRouteDetails">-</span></p>
+                    </div>
+                    <div class="form-actions">
+                        <input type="text" id="newStopName" class="input" placeholder="Stop Name" style="flex: 1; margin-bottom: 0;">
+                        <input type="number" id="newStopOrder" class="input" placeholder="Order" style="width: 100px; margin-bottom: 0;">
+                        <button onclick="addStop()" class="btn btn-primary">Add Stop</button>
+                        <button onclick="hideStopsSection()" class="btn btn-outline">Close</button>
+                    </div>
+                    <div class="table-container" style="margin-top: 1rem;">
+                        <table class="table">
+                            <thead><tr><th>Order</th><th>Stop Name</th><th>Actions</th></tr></thead>
+                            <tbody id="stopsTable"><tr><td colspan="3" class="loading">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Users -->
+            <div id="users" class="tab-panel">
+                <div class="card">
+                    <h3>👥 Users Management</h3>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead><tr><th>Email</th><th>Role</th><th>Verified</th><th>Joined</th></tr></thead>
+                            <tbody id="usersTable"><tr><td colspan="4" class="loading">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rides -->
+            <div id="rides" class="tab-panel">
+                <div class="card">
+                    <h3>🚗 Rides Management</h3>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead><tr><th>Route</th><th>Driver</th><th>Date</th><th>Status</th></tr></thead>
+                            <tbody id="ridesTable"><tr><td colspan="4" class="loading">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Financial -->
+            <div id="financial" class="tab-panel">
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-value" id="walletBalance">₹0</div><div class="stat-label">Total Wallet Balance</div></div>
+                </div>
+                <div class="card">
+                    <h3>💰 Recent Transactions</h3>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead><tr><th>Date</th><th>User</th><th>Amount</th><th>Type</th></tr></thead>
+                            <tbody id="transactionsTable"><tr><td colspan="4" class="text-center">No transactions found</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
-    </section>
-  </div>
+    </div>
 
-</main>
+    <script>
+        let supabaseClient = null;
+        let currentUser = null;
+        let cities = [];
+        let currentRoutes = [];
+        let selectedRoute = null;
 
-<script>
-/* ========================
-   Adjust endpoints here
-   ======================== */
-const API = {
-  cities: {
-    list:   () => '/admin/cities',
-    create: () => '/admin/cities',
-    del:    (id) => `/admin/cities/${encodeURIComponent(id)}`
-  },
-  routes: {
-    list:   () => '/admin/routes',                // GET
-    create: () => '/admin/routes',                // POST {from_city_id,to_city_id,name}
-    del:    (id) => `/admin/routes/${encodeURIComponent(id)}` // DELETE
-  },
-  stops: {
-    list:   (routeId) => `/admin/routes/${encodeURIComponent(routeId)}/stops`,
-    create: (routeId) => `/admin/routes/${encodeURIComponent(routeId)}/stops`,
-    del:    (routeId, stopId) => `/admin/routes/${encodeURIComponent(routeId)}/stops/${encodeURIComponent(stopId)}`
-  }
-};
+        const config = {
+            get supabaseUrl() { return localStorage.getItem('supabase_url') || ''; },
+            set supabaseUrl(value) { localStorage.setItem('supabase_url', value); },
+            get supabaseKey() { return localStorage.getItem('supabase_key') || ''; },
+            set supabaseKey(value) { localStorage.setItem('supabase_key', value); }
+        };
 
-/* =========================
-   Tabs
-   ========================= */
-const tabButtons = document.querySelectorAll('.tab');
-const tabPanels  = document.querySelectorAll('.tabpanel');
-tabButtons.forEach(btn=>{
-  btn.onclick = ()=>{
-    tabButtons.forEach(b=>b.classList.remove('active'));
-    tabPanels.forEach(p=>p.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById(btn.dataset.tab).classList.add('active');
-  };
-});
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('supabaseUrl').value = config.supabaseUrl;
+            document.getElementById('supabaseKey').value = config.supabaseKey;
+            document.getElementById('loginForm').addEventListener('submit', handleLogin);
+            document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+            });
+            checkSession();
+        });
 
-/* =========================
-   Config
-   ========================= */
-const apiBaseInput = document.getElementById('apiBase');
-const saveCfgBtn   = document.getElementById('saveCfg');
-const reloadBtn    = document.getElementById('reload');
+        async function checkSession() {
+            if (config.supabaseUrl && config.supabaseKey) {
+                try {
+                    supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseKey);
+                    const { data: { session } } = await supabaseClient.auth.getSession();
+                    if (session && session.user) {
+                        const { data: adminData } = await supabaseClient.from('admins').select('user_id').eq('user_id', session.user.id).single();
+                        if (adminData) {
+                            currentUser = session.user;
+                            showMainInterface();
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Session check error:', error);
+                }
+            }
+        }
 
-const cfg = {
-  get apiBase() {
-    const fromQs = new URLSearchParams(location.search).get('api');
-    if (fromQs) return fromQs;
-    return localStorage.getItem('API_BASE') || 'http://localhost:3000';
-  },
-  set apiBase(v){ localStorage.setItem('API_BASE', v); }
-};
-apiBaseInput.value = cfg.apiBase;
-saveCfgBtn && (saveCfgBtn.onclick = ()=>{ cfg.apiBase = apiBaseInput.value.trim(); alert('Saved'); });
-reloadBtn  && (reloadBtn.onclick  = ()=>location.reload());
+        async function handleLogin(event) {
+            event.preventDefault();
+            const url = document.getElementById('supabaseUrl').value.trim();
+            const key = document.getElementById('supabaseKey').value.trim();
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
 
-async function fetchJSON(path, opts={}) {
-  const res = await fetch(cfg.apiBase + path, {
-    headers:{'Accept':'application/json','Content-Type':'application/json'},
-    ...opts
-  });
-  const txt = await res.text();
-  let data; try{ data = txt ? JSON.parse(txt) : null; } catch { data = txt; }
-  if (!res.ok) throw new Error((data && data.error) || txt || res.statusText);
-  return data;
-}
-const postJSON = (path, body) => fetchJSON(path, {method:'POST', body: JSON.stringify(body)});
-const del      = (path)        => fetchJSON(path, {method:'DELETE'});
+            if (!url || !key || !email || !password) {
+                showError('Please fill in all fields');
+                return;
+            }
 
-/* =========================
-   Cities
-   ========================= */
-const cityName    = document.getElementById('cityName');
-const cityState   = document.getElementById('cityState');
-const addCityBtn  = document.getElementById('addCity');
-const seedBtn     = document.getElementById('seedMH');
-const citiesTbody = document.querySelector('#citiesTable tbody');
-const refreshCitiesBtn = document.getElementById('refreshCities');
-const routeFromSel = document.getElementById('routeFrom');
-const routeToSel   = document.getElementById('routeTo');
+            try {
+                config.supabaseUrl = url;
+                config.supabaseKey = key;
+                supabaseClient = window.supabase.createClient(url, key);
+                const { data, error } = await supabaseClient.auth.signInWithPassword({ email: email, password: password });
+                if (error) throw error;
 
-function fillCitySelect(select, list){
-  select.innerHTML = '<option value="">Select…</option>';
-  list.forEach(c=>{
-    const o = document.createElement('option');
-    o.value = c.id; o.textContent = `${c.name}${c.state ? ' — '+c.state:''}`;
-    select.appendChild(o);
-  });
-}
+                const { data: adminData, error: adminError } = await supabaseClient.from('admins').select('user_id').eq('user_id', data.user.id).single();
+                if (adminError && adminError.code !== 'PGRST116') throw adminError;
+                if (!adminData) throw new Error('Access denied: You are not authorized as an admin.');
 
-async function loadCities(){
-  try{
-    citiesTbody.innerHTML = '<tr><td colspan="4" class="muted">Loading…</td></tr>';
-    const list = await fetchJSON(API.cities.list());
-    renderCities(list||[]);
-    fillCitySelect(routeFromSel, list||[]);
-    fillCitySelect(routeToSel,   list||[]);
-  }catch(e){
-    citiesTbody.innerHTML = `<tr><td colspan="4" class="muted">Failed: ${e.message}</td></tr>`;
-  }
-}
-function renderCities(list){
-  if(!Array.isArray(list) || !list.length){
-    citiesTbody.innerHTML = '<tr><td colspan="4" class="muted">No cities</td></tr>'; return;
-  }
-  citiesTbody.innerHTML = '';
-  list.forEach(c=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${c.id ?? ''}</td>
-      <td>${c.name ?? ''}</td>
-      <td>${c.state ?? ''}</td>
-      <td class="right"><button class="danger">Delete</button></td>`;
-    tr.querySelector('button').onclick = async ()=>{
-      if(!confirm('Delete city?')) return;
-      try{ await del(API.cities.del(c.id)); await loadCities(); }
-      catch(e){ alert('Delete failed: '+e.message); }
-    };
-    citiesTbody.appendChild(tr);
-  });
-}
-addCityBtn && (addCityBtn.onclick = async ()=>{
-  const name = (cityName.value||'').trim();
-  const state= (cityState.value||'').trim();
-  if(!name) return alert('City name required');
-  try{
-    await postJSON(API.cities.create(), {name, state});
-    cityName.value=''; await loadCities();
-  }catch(e){ alert('Add failed: '+e.message); }
-});
-seedBtn && (seedBtn.onclick = async ()=>{
-  if(!confirm('Seed common Maharashtra cities?')) return;
-  const mh = ['Mumbai','Pune','Nagpur','Nashik','Thane','Chhatrapati Sambhajinagar','Navi Mumbai','Solapur','Kolhapur','Amravati','Sangli','Latur','Akola'];
-  try{
-    for(const n of mh){ await postJSON(API.cities.create(), {name:n, state:'Maharashtra'}); }
-    await loadCities(); alert('Seeded Maharashtra cities');
-  }catch(e){ alert('Seed failed: '+e.message); }
-});
-refreshCitiesBtn && (refreshCitiesBtn.onclick = loadCities);
+                currentUser = data.user;
+                showMainInterface();
+                hideError();
+            } catch (error) {
+                console.error('Login error:', error);
+                showError(error.message);
+            }
+        }
 
-/* =========================
-   Routes
-   ========================= */
-const routeName   = document.getElementById('routeName');
-const addRouteBtn = document.getElementById('addRoute');
-const routesTbody = document.querySelector('#routesTable tbody');
-const refreshRoutesBtn = document.getElementById('refreshRoutes');
-const stopsRouteSel = document.getElementById('stopsRoute');
+        function handleLogout() {
+            if (supabaseClient) supabaseClient.auth.signOut();
+            currentUser = null;
+            selectedRoute = null;
+            document.getElementById('loginContainer').style.display = 'flex';
+            document.getElementById('mainContent').style.display = 'none';
+            hideError();
+        }
 
-async function loadRoutes(){
-  routesTbody.innerHTML = '<tr><td colspan="5" class="muted">Loading…</td></tr>';
-  try{
-    const list = await fetchJSON(API.routes.list());
-    renderRoutes(list||[]);
-    // Fill stops’ route selector
-    stopsRouteSel.innerHTML = '<option value="">Select route…</option>';
-    (list||[]).forEach(r=>{
-      const o = document.createElement('option');
-      o.value = r.id; o.textContent = `[${r.id}] ${r.from_city_name ?? r.from_city_id} → ${r.to_city_name ?? r.to_city_id} (${r.name||'no name'})`;
-      stopsRouteSel.appendChild(o);
-    });
-  }catch(e){
-    routesTbody.innerHTML = `<tr><td colspan="5" class="muted">Failed: ${e.message}</td></tr>`;
-  }
-}
-function renderRoutes(list){
-  if(!Array.isArray(list) || !list.length){
-    routesTbody.innerHTML = '<tr><td colspan="5" class="muted">No routes</td></tr>'; return;
-  }
-  routesTbody.innerHTML = '';
-  list.forEach(r=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${r.id ?? ''}</td>
-      <td>${r.from_city_name ?? r.from_city_id}</td>
-      <td>${r.to_city_name ?? r.to_city_id}</td>
-      <td>${r.name ?? ''}</td>
-      <td class="right"><button class="danger">Delete</button></td>`;
-    tr.querySelector('button').onclick = async ()=>{
-      if(!confirm('Delete route?')) return;
-      try{ await del(API.routes.del(r.id)); await loadRoutes(); }
-      catch(e){ alert('Delete failed: '+e.message); }
-    };
-    routesTbody.appendChild(tr);
-  });
-}
-addRouteBtn && (addRouteBtn.onclick = async ()=>{
-  const fromId = routeFromSel.value; const toId = routeToSel.value; const name = (routeName.value||'').trim();
-  if(!fromId || !toId) return alert('Select From and To');
-  try{
-    await postJSON(API.routes.create(), { from_city_id: Number(fromId), to_city_id: Number(toId), name });
-    routeName.value = ''; await loadRoutes();
-  }catch(e){ alert('Add route failed: '+e.message); }
-});
-refreshRoutesBtn && (refreshRoutesBtn.onclick = loadRoutes);
+        function showMainInterface() {
+            document.getElementById('loginContainer').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'block';
+            loadDashboard();
+            loadCities();
+        }
 
-/* =========================
-   Sub-stops
-   ========================= */
-const stopName = document.getElementById('stopName');
-const stopSeq  = document.getElementById('stopSeq');
-const stopDist = document.getElementById('stopDist');
-const stopEta  = document.getElementById('stopEta');
-const addStopBtn = document.getElementById('addStop');
-const stopsTbody = document.querySelector('#stopsTable tbody');
-const refreshStopsBtn = document.getElementById('refreshStops');
+        function switchTab(tabId) {
+            document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+            document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
 
-async function loadStops(){
-  const r = stopsRouteSel.value;
-  if(!r){ stopsTbody.innerHTML = '<tr><td colspan="6" class="muted">Select a route above</td></tr>'; return; }
-  stopsTbody.innerHTML = '<tr><td colspan="6" class="muted">Loading…</td></tr>';
-  try{
-    const list = await fetchJSON(API.stops.list(r));
-    renderStops(list||[]);
-  }catch(e){
-    stopsTbody.innerHTML = `<tr><td colspan="6" class="muted">Failed: ${e.message}</td></tr>`;
-  }
-}
-function renderStops(list){
-  if(!Array.isArray(list) || !list.length){
-    stopsTbody.innerHTML = '<tr><td colspan="6" class="muted">No stops</td></tr>'; return;
-  }
-  // sort by seq if backend didn’t
-  list.sort((a,b)=>(a.seq||0)-(b.seq||0));
-  stopsTbody.innerHTML = '';
-  list.forEach(s=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${s.id ?? ''}</td>
-      <td>${s.seq ?? ''}</td>
-      <td>${s.name ?? ''}</td>
-      <td>${s.distance_km ?? ''}</td>
-      <td>${s.eta_offset_min ?? ''}</td>
-      <td class="right"><button class="danger">Delete</button></td>`;
-    tr.querySelector('button').onclick = async ()=>{
-      if(!confirm('Delete stop?')) return;
-      try{ await del(API.stops.del(stopsRouteSel.value, s.id)); await loadStops(); }
-      catch(e){ alert('Delete failed: '+e.message); }
-    };
-    stopsTbody.appendChild(tr);
-  });
-}
-addStopBtn && (addStopBtn.onclick = async ()=>{
-  const routeId = stopsRouteSel.value;
-  if(!routeId) return alert('Select a route');
-  const payload = {
-    name: (stopName.value||'').trim(),
-    seq:  stopSeq.value ? Number(stopSeq.value) : null,
-    distance_km: stopDist.value ? Number(stopDist.value) : null,
-    eta_offset_min: stopEta.value ? Number(stopEta.value) : null
-  };
-  if(!payload.name) return alert('Stop name required');
-  try{
-    await postJSON(API.stops.create(routeId), payload);
-    stopName.value=''; stopSeq.value=''; stopDist.value=''; stopEta.value='';
-    await loadStops();
-  }catch(e){ alert('Add stop failed: '+e.message); }
-});
-stopsRouteSel && (stopsRouteSel.onchange = loadStops);
-refreshStopsBtn && (refreshStopsBtn.onclick = loadStops);
+            switch(tabId) {
+                case 'dashboard': loadDashboard(); break;
+                case 'cities-routes': loadCities(); break;
+                case 'users': loadUsers(); break;
+                case 'rides': loadRides(); break;
+                case 'financial': loadFinancial(); break;
+            }
+        }
 
-/* =========================
-   Boot
-   ========================= */
-loadCities().then(loadRoutes).then(loadStops);
-</script>
+        async function loadDashboard() {
+            try {
+                const [usersResult, ridesResult, citiesResult, routesResult] = await Promise.all([
+                    supabaseClient.from('profiles').select('id', { count: 'exact', head: true }),
+                    supabaseClient.from('rides').select('id', { count: 'exact', head: true }),
+                    supabaseClient.from('cities').select('id', { count: 'exact', head: true }),
+                    supabaseClient.from('routes').select('id', { count: 'exact', head: true })
+                ]);
+
+                document.getElementById('totalUsers').textContent = usersResult.count || 0;
+                document.getElementById('totalRides').textContent = ridesResult.count || 0;
+                document.getElementById('totalCities').textContent = citiesResult.count || 0;
+                document.getElementById('totalRoutes').textContent = routesResult.count || 0;
+                document.getElementById('recentActivity').innerHTML = '<p>Dashboard loaded successfully!</p>';
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+            }
+        }
+
+        async function loadCities() {
+            try {
+                const { data, error } = await supabaseClient.from('cities').select('*').order('name');
+                if (error) throw error;
+                cities = data || [];
+                updateCitiesTable();
+                updateCitySelects();
+            } catch (error) {
+                console.error('Error loading cities:', error);
+                document.getElementById('citiesTable').innerHTML = '<tr><td colspan="3" style="color: var(--danger);">Error loading cities</td></tr>';
+            }
+        }
+
+        function updateCitiesTable() {
+            const tbody = document.getElementById('citiesTable');
+            if (cities.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center">No cities found</td></tr>';
+                return;
+            }
+            tbody.innerHTML = cities.map(city => `
+                <tr>
+                    <td><strong>${city.name}</strong></td>
+                    <td>${city.state || '-'}</td>
+                    <td><button onclick="deleteCity('${city.id}')" class="btn btn-danger btn-sm">Delete</button></td>
+                </tr>
+            `).join('');
+        }
+
+        function updateCitySelects() {
+            const fromSelect = document.getElementById('fromCitySelect');
+            const toSelect = document.getElementById('toCitySelect');
+            const options = cities.map(city => `<option value="${city.id}">${city.name}, ${city.state || 'N/A'}</option>`).join('');
+            fromSelect.innerHTML = '<option value="">Select From City</option>' + options;
+            toSelect.innerHTML = '<option value="">Select To City</option>' + options;
+        }
+
+        async function addCity() {
+            const name = document.getElementById('newCityName').value.trim();
+            const state = document.getElementById('newCityState').value.trim();
+            if (!name) { alert('Please enter a city name'); return; }
+            try {
+                const { error } = await supabaseClient.from('cities').insert({ name: name, state: state || null });
+                if (error) throw error;
+                document.getElementById('newCityName').value = '';
+                document.getElementById('newCityState').value = '';
+                await loadCities();
+                showSuccess('City added successfully!');
+            } catch (error) {
+                alert('Error adding city: ' + error.message);
+            }
+        }
+
+        async function deleteCity(cityId) {
+            if (!confirm('Delete this city and all its routes?')) return;
+            try {
+                const { error } = await supabaseClient.from('cities').delete().eq('id', cityId);
+                if (error) throw error;
+                await loadCities();
+                showSuccess('City deleted successfully!');
+            } catch (error) {
+                alert('Error deleting city: ' + error.message);
+            }
+        }
+
+        async function loadRoutes() {
+            const fromCityId = document.getElementById('fromCitySelect').value;
+            const toCityId = document.getElementById('toCitySelect').value;
+            if (!fromCityId || !toCityId) { alert('Please select both cities'); return; }
+            if (fromCityId === toCityId) { alert('Cities cannot be the same'); return; }
+
+            try {
+                const { data, error } = await supabaseClient
+                    .from('routes')
+                    .select('*, from_city:cities!routes_from_city_id_fkey(name), to_city:cities!routes_to_city_id_fkey(name)')
+                    .eq('from_city_id', fromCityId)
+                    .eq('to_city_id', toCityId)
+                    .order('name');
+                if (error) throw error;
+
+                currentRoutes = data || [];
+                updateRoutesTable();
+                document.getElementById('addRouteBtn').style.display = 'inline-flex';
+            } catch (error) {
+                console.error('Error loading routes:', error);
+                document.getElementById('routesTable').innerHTML = '<tr><td colspan="4" style="color: var(--danger);">Error loading routes</td></tr>';
+            }
+        }
+
+        function updateRoutesTable() {
+            const tbody = document.getElementById('routesTable');
+            if (currentRoutes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center">No routes found between selected cities</td></tr>';
+                return;
+            }
+            tbody.innerHTML = currentRoutes.map(route => `
+                <tr class="clickable" onclick="selectRoute('${route.id}', '${route.name}', '${route.from_city?.name}', '${route.to_city?.name}')">
+                    <td><strong>${route.name}</strong></td>
+                    <td>${route.distance ? route.distance + ' km' : '-'}</td>
+                    <td>-</td>
+                    <td><button onclick="event.stopPropagation(); deleteRoute('${route.id}')" class="btn btn-danger btn-sm">Delete</button></td>
+                </tr>
+            `).join('');
+        }
+
+        function showAddRouteForm() {
+            document.getElementById('addRouteForm').classList.remove('hidden');
+            document.getElementById('addRouteBtn').textContent = 'Hide Form';
+            document.getElementById('addRouteBtn').onclick = hideAddRouteForm;
+        }
+
+        function hideAddRouteForm() {
+            document.getElementById('addRouteForm').classList.add('hidden');
+            document.getElementById('addRouteBtn').textContent = 'Add New Route';
+            document.getElementById('addRouteBtn').onclick = showAddRouteForm;
+            document.getElementById('newRouteName').value = '';
+            document.getElementById('newRouteDistance').value = '';
+        }
+
+        async function addRoute() {
+            const name = document.getElementById('newRouteName').value.trim();
+            const distance = parseFloat(document.getElementById('newRouteDistance').value) || null;
+            const fromCityId = document.getElementById('fromCitySelect').value;
+            const toCityId = document.getElementById('toCitySelect').value;
+            if (!name) { alert('Please enter route name'); return; }
+
+            try {
+                const { error } = await supabaseClient.from('routes').insert({
+                    name: name,
+                    from_city_id: parseInt(fromCityId),
+                    to_city_id: parseInt(toCityId),
+                    distance: distance
+                });
+                if (error) throw error;
+                hideAddRouteForm();
+                await loadRoutes();
+                showSuccess('Route added successfully!');
+            } catch (error) {
+                alert('Error adding route: ' + error.message);
+            }
+        }
+
+        async function deleteRoute(routeId) {
+            if (!confirm('Delete this route and all its stops?')) return;
+            try {
+                const { error } = await supabaseClient.from('routes').delete().eq('id', routeId);
+                if (error) throw error;
+                await loadRoutes();
+                hideStopsSection();
+                showSuccess('Route deleted successfully!');
+            } catch (error) {
+                alert('Error deleting route: ' + error.message);
+            }
+        }
+
+        async function selectRoute(routeId, routeName, fromCity, toCity) {
+            selectedRoute = { id: routeId, name: routeName, fromCity: fromCity, toCity: toCity };
+            document.getElementById('selectedRouteName').textContent = routeName;
+            document.getElementById('selectedRouteDetails').textContent = `${fromCity} → ${toCity}`;
+            document.getElementById('stopsSection').classList.remove('hidden');
+            await loadStops();
+        }
+
+        function hideStopsSection() {
+            document.getElementById('stopsSection').classList.add('hidden');
+            selectedRoute = null;
+        }
+
+        async function loadStops() {
+            if (!selectedRoute) return;
+            try {
+                const { data, error } = await supabaseClient
+                    .from('route_stops')
+                    .select('*, stops(*)')
+                    .eq('route_id', selectedRoute.id)
+                    .order('rank');
+                if (error) throw error;
+                updateStopsTable(data || []);
+            } catch (error) {
+                console.error('Error loading stops:', error);
+                document.getElementById('stopsTable').innerHTML = '<tr><td colspan="3" style="color: var(--danger);">Error loading stops</td></tr>';
+            }
+        }
+
+        function updateStopsTable(stops) {
+            const tbody = document.getElementById('stopsTable');
+            if (stops.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" class="text-center">No stops found</td></tr>';
+                return;
+            }
+            tbody.innerHTML = stops.map(routeStop => `
+                <tr>
+                    <td><div class="stop-order">${routeStop.rank}</div></td>
+                    <td><strong>${routeStop.stops?.name || 'Unknown Stop'}</strong></td>
+                    <td><button onclick="deleteStop('${routeStop.route_id}', '${routeStop.stop_id}')" class="btn btn-danger btn-sm">Delete</button></td>
+                </tr>
+            `).join('');
+        }
+
+        async function addStop() {
+            if (!selectedRoute) return;
+            const name = document.getElementById('newStopName').value.trim();
+            const order = parseInt(document.getElementById('newStopOrder').value) || 1;
+            if (!name) { alert('Please enter a stop name'); return; }
+            try {
+                const { data: stopData, error: stopError } = await supabaseClient.from('stops').insert({ name: name }).select().single();
+                if (stopError) throw stopError;
+                const { error: routeStopError } = await supabaseClient.from('route_stops').insert({
+                    route_id: selectedRoute.id, stop_id: stopData.id, rank: order, is_pickup: true, is_drop: true
+                });
+                if (routeStopError) throw routeStopError;
+                document.getElementById('newStopName').value = '';
+                document.getElementById('newStopOrder').value = '';
+                await loadStops();
+                showSuccess('Stop added successfully!');
+            } catch (error) {
+                alert('Error adding stop: ' + error.message);
+            }
+        }
+
+        async function deleteStop(routeId, stopId) {
+            if (!confirm('Delete this stop from the route?')) return;
+            try {
+                const { error } = await supabaseClient.from('route_stops').delete().eq('route_id', routeId).eq('stop_id', stopId);
+                if (error) throw error;
+                await loadStops();
+                showSuccess('Stop deleted successfully!');
+            } catch (error) {
+                alert('Error deleting stop: ' + error.message);
+            }
+        }
+
+        async function loadUsers() {
+            try {
+                const { data, error } = await supabaseClient.from('profiles').select('*').order('created_at', { ascending: false }).limit(50);
+                if (error) throw error;
+                updateUsersTable(data || []);
+            } catch (error) {
+                console.error('Error loading users:', error);
+                document.getElementById('usersTable').innerHTML = '<tr><td colspan="4" style="color: var(--danger);">Error loading users</td></tr>';
+            }
+        }
+
+        function updateUsersTable(users) {
+            const tbody = document.getElementById('usersTable');
+            if (users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center">No users found</td></tr>';
+                return;
+            }
+            tbody.innerHTML = users.map(user => `
+                <tr>
+                    <td>${user.email || '-'}</td>
+                    <td>${user.role || 'rider'}</td>
+                    <td>${user.docs_verified ? '✅ Yes' : '❌ No'}</td>
+                    <td>${new Date(user.created_at).toLocaleDateString()}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadRides() {
+            try {
+                const { data, error } = await supabaseClient.from('rides').select('*, profiles!rides_driver_id_fkey(email)').order('created_at', { ascending: false }).limit(50);
+                if (error) throw error;
+                updateRidesTable(data || []);
+            } catch (error) {
+                console.error('Error loading rides:', error);
+                document.getElementById('ridesTable').innerHTML = '<tr><td colspan="4" style="color: var(--danger);">Error loading rides</td></tr>';
+            }
+        }
+
+        function updateRidesTable(rides) {
+            const tbody = document.getElementById('ridesTable');
+            if (rides.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center">No rides found</td></tr>';
+                return;
+            }
+            tbody.innerHTML = rides.map(ride => `
+                <tr>
+                    <td>${ride.pickup_location} → ${ride.drop_location}</td>
+                    <td>${ride.profiles?.email || 'Unknown'}</td>
+                    <td>${ride.depart_date || '-'}</td>
+                    <td>${ride.status || 'active'}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadFinancial() {
+            try {
+                const { data: wallets, error: walletsError } = await supabaseClient.from('wallets').select('balance_available_inr');
+                if (walletsError) throw walletsError;
+                const totalBalance = wallets?.reduce((sum, wallet) => sum + (wallet.balance_available_inr || 0), 0) || 0;
+                document.getElementById('walletBalance').textContent = `₹${totalBalance.toFixed(2)}`;
+            } catch (error) {
+                console.error('Error loading financial data:', error);
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('loginError');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+
+        function hideError() {
+            document.getElementById('loginError').classList.add('hidden');
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success';
+            successDiv.textContent = message;
+            const container = document.querySelector('.container');
+            container.insertBefore(successDiv, container.firstChild);
+            setTimeout(() => {
+                if (successDiv.parentNode) successDiv.parentNode.removeChild(successDiv);
+            }, 3000);
+        }
+
+        // Global function declarations
+        window.addCity = addCity;
+        window.deleteCity = deleteCity;
+        window.loadRoutes = loadRoutes;
+        window.showAddRouteForm = showAddRouteForm;
+        window.hideAddRouteForm = hideAddRouteForm;
+        window.addRoute = addRoute;
+        window.deleteRoute = deleteRoute;
+        window.selectRoute = selectRoute;
+        window.hideStopsSection = hideStopsSection;
+        window.addStop = addStop;
+        window.deleteStop = deleteStop;
+    </script>
 </body>
 </html>

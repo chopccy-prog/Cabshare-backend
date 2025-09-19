@@ -1,0 +1,1124 @@
+function renderStops(stops) {
+            const fromStopsList = document.getElementById('fromStopsList');
+            const toStopsList = document.getElementById('toStopsList');
+            
+            // Clear lists
+            fromStopsList.innerHTML = '';
+            toStopsList.innerHTML = '';
+            
+            if (stops.length === 0) {
+                fromStopsList.innerHTML = '<div class="text-muted" style="padding: 1rem; text-align: center;">No stops added yet</div>';
+                toStopsList.innerHTML = '<div class="text-muted" style="padding: 1rem; text-align: center;">No stops added yet</div>';
+                return;
+            }
+            
+            // Separate stops by city or by position (first half vs second half)
+            const midPoint = Math.ceil(stops.length / 2);
+            let fromStops = stops.slice(0, midPoint);
+            let toStops = stops.slice(midPoint);
+            
+            // Try to separate by actual city if data is available
+            try {<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>CabShare Cities & Routes Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+          --primary: #0ea5e9;
+          --primary-dark: #0284c7;
+          --surface: #ffffff;
+          --border: #e2e8f0;
+          --text: #1e293b;
+          --text-muted: #64748b;
+          --success: #10b981;
+          --error: #ef4444;
+          --warning: #f59e0b;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; color: var(--text); }
+        
+        .container { max-width: 1400px; margin: 0 auto; padding: 1rem; }
+        
+        /* Login Styles */
+        .login-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .login-card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 400px; }
+        .login-title { text-align: center; margin-bottom: 2rem; color: var(--text); font-size: 1.5rem; }
+        
+        /* Main Content */
+        .main-content { display: none; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding: 1rem 0; border-bottom: 1px solid var(--border); }
+        .header h1 { color: var(--text); font-size: 1.75rem; }
+        
+        /* Card Styles */
+        .card { background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid var(--border); }
+        .card h3 { margin-bottom: 1rem; color: var(--text); font-size: 1.25rem; display: flex; align-items: center; gap: 0.5rem; }
+        
+        /* Form Controls */
+        .form-row { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        .form-group { flex: 1; min-width: 200px; }
+        .input, .select { width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: 8px; font-size: 0.875rem; }
+        .input:focus, .select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1); }
+        
+        /* Button Styles */
+        .btn { padding: 0.75rem 1rem; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 0.875rem; font-weight: 500; display: inline-flex; align-items: center; gap: 0.5rem; transition: all 0.2s; }
+        .btn:hover { background: var(--primary-dark); transform: translateY(-1px); }
+        .btn-secondary { background: var(--text-muted); }
+        .btn-secondary:hover { background: #475569; }
+        .btn-danger { background: var(--error); }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-success { background: var(--success); }
+        .btn-success:hover { background: #059669; }
+        
+        /* Table Styles */
+        .table-container { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+        .table { width: 100%; border-collapse: collapse; background: white; }
+        .table th { background: #f8fafc; padding: 1rem 0.75rem; text-align: left; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--border); }
+        .table td { padding: 0.75rem; border-bottom: 1px solid var(--border); color: var(--text); }
+        .table tr:hover { background: #f8fafc; }
+        .table tr.clickable { cursor: pointer; }
+        .table tr.clickable:hover { background: #e0f2fe; }
+        
+        /* Status Indicators */
+        .status { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
+        .status-active { background: #dcfce7; color: #166534; }
+        .status-inactive { background: #fee2e2; color: #991b1b; }
+        
+        /* Stops Section */
+        .stops-section { display: none; border-top: 2px solid var(--primary); padding-top: 1.5rem; margin-top: 1.5rem; }
+        .stops-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+        .stops-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+        .stops-column { border: 1px solid var(--border); border-radius: 8px; padding: 1rem; background: #f8fafc; }
+        .stops-column h4 { margin-bottom: 1rem; color: var(--text); display: flex; align-items: center; gap: 0.5rem; }
+        .stop-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; background: white; border-radius: 6px; margin-bottom: 0.5rem; border: 1px solid var(--border); }
+        .stop-order { background: var(--primary); color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 600; }
+        
+        /* Utility Classes */
+        .hidden { display: none !important; }
+        .loading { opacity: 0.6; pointer-events: none; }
+        .error { color: var(--error); font-size: 0.875rem; margin-top: 0.5rem; }
+        .success { color: var(--success); font-size: 0.875rem; margin-top: 0.5rem; }
+        .text-muted { color: var(--text-muted); }
+        .mb-0 { margin-bottom: 0; }
+        
+        /* Icons */
+        .icon { width: 1rem; height: 1rem; display: inline-block; }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container { padding: 0.5rem; }
+            .form-row { flex-direction: column; }
+            .stops-grid { grid-template-columns: 1fr; }
+            .header { flex-direction: column; gap: 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Login -->
+    <div id="loginContainer" class="login-container">
+        <div class="login-card">
+            <h1 class="login-title">🚗 CabShare Admin</h1>
+            <div id="loginError" class="error hidden"></div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <input type="url" class="input" id="supabaseUrl" placeholder="Supabase URL" required>
+                </div>
+                <div class="form-group">
+                    <input type="password" class="input" id="supabaseKey" placeholder="Supabase Key" required>
+                </div>
+                <div class="form-group">
+                    <input type="email" class="input" id="loginEmail" placeholder="Admin Email" required>
+                </div>
+                <div class="form-group">
+                    <input type="password" class="input" id="loginPassword" placeholder="Password" required>
+                </div>
+                <button type="submit" class="btn" style="width: 100%; margin-top: 1rem;">
+                    🔐 Sign In
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent" class="main-content">
+        <div class="container">
+            <header class="header">
+                <h1>🗺️ Cities & Routes Management</h1>
+                <div style="display: flex; gap: 1rem; align-items: center;">
+                    <span id="userInfo" class="text-muted"></span>
+                    <button id="logoutBtn" class="btn btn-secondary">Logout</button>
+                </div>
+            </header>
+
+            <!-- Cities Management -->
+            <div class="card">
+                <h3>🏙️ Cities Management</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <input type="text" id="cityName" class="input" placeholder="City Name" required>
+                    </div>
+                    <div class="form-group">
+                        <input type="text" id="cityState" class="input" placeholder="State">
+                    </div>
+                    <div class="form-group">
+                        <input type="text" id="cityStateCode" class="input" placeholder="State Code (MH, GJ, etc.)">
+                    </div>
+                    <button onclick="addCity()" class="btn btn-success">
+                        ➕ Add City
+                    </button>
+                </div>
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>City</th>
+                                <th>State</th>
+                                <th>State Code</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="citiesTable">
+                            <tr><td colspan="6" class="text-muted">Loading cities...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Routes Management -->
+            <div class="card">
+                <h3>🛣️ Routes Management</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <select id="fromCitySelect" class="select">
+                            <option value="">Select From City</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <select id="toCitySelect" class="select">
+                            <option value="">Select To City</option>
+                        </select>
+                    </div>
+                    <button onclick="loadRoutes()" class="btn">
+                        🔄 Load Routes
+                    </button>
+                    <button onclick="createBothDirectionRoutes()" class="btn btn-success">
+                        ➕ Create Both Ways
+                    </button>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <input type="text" id="routeName" class="input" placeholder="Route Name (e.g., Express Route)">
+                    </div>
+                    <div class="form-group">
+                        <input type="number" id="routeDistance" class="input" placeholder="Distance (km)">
+                    </div>
+                    <div class="form-group">
+                        <input type="number" id="routeDuration" class="input" placeholder="Duration (minutes)">
+                    </div>
+                    <button onclick="addRoute()" class="btn btn-success">
+                        ➕ Add Route
+                    </button>
+                </div>
+
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Route Name</th>
+                                <th>From → To</th>
+                                <th>Distance</th>
+                                <th>Duration</th>
+                                <th>Stops</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="routesTable">
+                            <tr><td colspan="6" class="text-muted">Select cities to view routes</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Stops Management Section -->
+                <div id="stopsSection" class="stops-section">
+                    <div class="stops-header">
+                        <h3>📍 Stops for Route: <span id="selectedRouteName"></span></h3>
+                        <button onclick="addSampleStops()" class="btn btn-secondary">
+                            🎯 Add Sample Stops
+                        </button>
+                        <button onclick="closeStopsSection()" class="btn btn-secondary">
+                            ✖️ Close
+                        </button>
+                    </div>
+                    
+                    <div class="stops-grid">
+                        <!-- From City Stops -->
+                        <div class="stops-column">
+                            <h4>
+                                📍 <span id="fromCityStops">From City</span> Stops
+                            </h4>
+                            <div class="form-row mb-0">
+                                <div class="form-group">
+                                    <input type="text" id="fromStopName" class="input" placeholder="Stop name">
+                                </div>
+                                <div class="form-group" style="flex: 0 0 100px;">
+                                    <input type="number" id="fromStopOrder" class="input" placeholder="Order" min="1">
+                                </div>
+                                <button onclick="addStop('from')" class="btn btn-success">➕</button>
+                            </div>
+                            <div id="fromStopsList" class="mt-1"></div>
+                        </div>
+
+                        <!-- To City Stops -->
+                        <div class="stops-column">
+                            <h4>
+                                📍 <span id="toCityStops">To City</span> Stops
+                            </h4>
+                            <div class="form-row mb-0">
+                                <div class="form-group">
+                                    <input type="text" id="toStopName" class="input" placeholder="Stop name">
+                                </div>
+                                <div class="form-group" style="flex: 0 0 100px;">
+                                    <input type="number" id="toStopOrder" class="input" placeholder="Order" min="1">
+                                </div>
+                                <button onclick="addStop('to')" class="btn btn-success">➕</button>
+                            </div>
+                            <div id="toStopsList" class="mt-1"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let supabaseClient = null;
+        let currentUser = null;
+        let cities = [];
+        let selectedRoute = null;
+        let fromCityId = null;
+        let toCityId = null;
+
+        // Configuration storage
+        const config = {
+            get supabaseUrl() { return localStorage.getItem('supabase_url') || ''; },
+            set supabaseUrl(value) { localStorage.setItem('supabase_url', value); },
+            get supabaseKey() { return localStorage.getItem('supabase_key') || ''; },
+            set supabaseKey(value) { localStorage.setItem('supabase_key', value); }
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('supabaseUrl').value = config.supabaseUrl;
+            document.getElementById('supabaseKey').value = config.supabaseKey;
+            
+            document.getElementById('loginForm').addEventListener('submit', handleLogin);
+            document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+            
+            // Auto-check login state
+            if (config.supabaseUrl && config.supabaseKey) {
+                initializeSupabase();
+            }
+        });
+
+        function initializeSupabase() {
+            try {
+                supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseKey);
+            } catch (error) {
+                console.error('Failed to initialize Supabase:', error);
+            }
+        }
+
+        async function handleLogin(event) {
+            event.preventDefault();
+            const url = document.getElementById('supabaseUrl').value;
+            const key = document.getElementById('supabaseKey').value;
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            config.supabaseUrl = url;
+            config.supabaseKey = key;
+
+            try {
+                supabaseClient = window.supabase.createClient(url, key);
+                const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+                if (error) throw error;
+
+                // Check admin access
+                const { data: adminData, error: adminError } = await supabaseClient
+                    .from('admins').select('user_id').eq('user_id', data.user.id).single();
+                if (adminError && adminError.code !== 'PGRST116') throw adminError;
+                if (!adminData) throw new Error('Access denied: Not an admin user.');
+
+                currentUser = data.user;
+                showMainInterface();
+            } catch (error) {
+                showError('loginError', error.message);
+            }
+        }
+
+        function handleLogout() {
+            if (supabaseClient) supabaseClient.auth.signOut();
+            currentUser = null;
+            document.getElementById('loginContainer').style.display = 'flex';
+            document.getElementById('mainContent').style.display = 'none';
+        }
+
+        function showMainInterface() {
+            document.getElementById('loginContainer').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'block';
+            document.getElementById('userInfo').textContent = `Logged in as: ${currentUser.email}`;
+            loadCities();
+        }
+
+        function showError(elementId, message) {
+            const errorEl = document.getElementById(elementId);
+            errorEl.textContent = message;
+            errorEl.classList.remove('hidden');
+            setTimeout(() => errorEl.classList.add('hidden'), 5000);
+        }
+
+        function showSuccess(message, duration = 3000) {
+            // Create temporary success message
+            const successEl = document.createElement('div');
+            successEl.className = 'success';
+            successEl.textContent = message;
+            successEl.style.position = 'fixed';
+            successEl.style.top = '20px';
+            successEl.style.right = '20px';
+            successEl.style.background = '#dcfce7';
+            successEl.style.padding = '1rem';
+            successEl.style.borderRadius = '8px';
+            successEl.style.border = '1px solid #16a34a';
+            successEl.style.zIndex = '1000';
+            document.body.appendChild(successEl);
+            setTimeout(() => successEl.remove(), duration);
+        }
+
+        // Cities Management
+        async function loadCities() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('cities')
+                    .select('*')
+                    .order('name');
+                
+                if (error) throw error;
+                cities = data || [];
+                
+                renderCitiesTable();
+                updateCitySelects();
+            } catch (error) {
+                console.error('Error loading cities:', error);
+                showError('loginError', 'Failed to load cities');
+            }
+        }
+
+        function renderCitiesTable() {
+            const tbody = document.getElementById('citiesTable');
+            if (cities.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-muted">No cities found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = cities.map(city => `
+                <tr>
+                    <td><strong>${city.name}</strong></td>
+                    <td>${city.state || '-'}</td>
+                    <td>${city.state_code || '-'}</td>
+                    <td><span class="status ${city.is_active ? 'status-active' : 'status-inactive'}">${city.is_active ? 'Active' : 'Inactive'}</span></td>
+                    <td>${new Date(city.created_at).toLocaleDateString()}</td>
+                    <td>
+                        <button onclick="deleteCity('${city.id}')" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
+                            🗑️ Delete
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function updateCitySelects() {
+            const fromSelect = document.getElementById('fromCitySelect');
+            const toSelect = document.getElementById('toCitySelect');
+            
+            const options = cities.map(c => `<option value="${c.id}">${c.name}, ${c.state || c.state_code || 'India'}</option>`).join('');
+            
+            fromSelect.innerHTML = '<option value="">Select From City</option>' + options;
+            toSelect.innerHTML = '<option value="">Select To City</option>' + options;
+        }
+
+        async function addCity() {
+            const name = document.getElementById('cityName').value.trim();
+            const state = document.getElementById('cityState').value.trim();
+            const stateCode = document.getElementById('cityStateCode').value.trim();
+            
+            if (!name) {
+                alert('City name is required');
+                return;
+            }
+
+            try {
+                const { error } = await supabaseClient
+                    .from('cities')
+                    .insert({ 
+                        name, 
+                        state: state || null, 
+                        state_code: stateCode || null,
+                        is_active: true 
+                    });
+                
+                if (error) throw error;
+                
+                // Clear form
+                document.getElementById('cityName').value = '';
+                document.getElementById('cityState').value = '';
+                document.getElementById('cityStateCode').value = '';
+                
+                showSuccess('City added successfully!');
+                loadCities();
+            } catch (error) {
+                alert('Error adding city: ' + error.message);
+            }
+        }
+
+        async function deleteCity(cityId) {
+            if (!confirm('Delete this city? This will also delete all related routes and stops.')) return;
+            
+            try {
+                const { error } = await supabaseClient
+                    .from('cities')
+                    .delete()
+                    .eq('id', cityId);
+                
+                if (error) throw error;
+                
+                showSuccess('City deleted successfully!');
+                loadCities();
+            } catch (error) {
+                alert('Error deleting city: ' + error.message);
+            }
+        }
+
+        // Routes Management
+        async function loadRoutes() {
+            fromCityId = document.getElementById('fromCitySelect').value;
+            toCityId = document.getElementById('toCitySelect').value;
+            
+            if (!fromCityId || !toCityId) {
+                alert('Please select both cities');
+                return;
+            }
+
+            try {
+                const { data, error } = await supabaseClient
+                    .from('routes')
+                    .select('*')
+                    .eq('from_city_id', fromCityId)
+                    .eq('to_city_id', toCityId);
+                
+                if (error) throw error;
+                
+                renderRoutesTable(data || []);
+            } catch (error) {
+                console.error('Error loading routes:', error);
+                alert('Failed to load routes');
+            }
+        }
+
+        function renderRoutesTable(routes) {
+            const tbody = document.getElementById('routesTable');
+            
+            if (routes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-muted">No routes found for selected cities</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = routes.map(route => `
+                <tr class="clickable" onclick="selectRoute('${route.id}', '${route.name}')">
+                    <td><strong>${route.name}</strong></td>
+                    <td>${getCityName(route.from_city_id)} → ${getCityName(route.to_city_id)}</td>
+                    <td>${route.distance_km ? route.distance_km + ' km' : '-'}</td>
+                    <td>${route.estimated_duration_minutes ? Math.floor(route.estimated_duration_minutes / 60) + 'h ' + (route.estimated_duration_minutes % 60) + 'm' : '-'}</td>
+                    <td><span class="text-muted">Click to manage</span></td>
+                    <td>
+                        <button onclick="event.stopPropagation(); deleteRoute('${route.id}')" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
+                            🗑️ Delete
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function getCityName(cityId) {
+            const city = cities.find(c => c.id === cityId);
+            return city ? city.name : 'Unknown';
+        }
+
+        async function addRoute() {
+            const name = document.getElementById('routeName').value.trim();
+            const distance = document.getElementById('routeDistance').value;
+            const duration = document.getElementById('routeDuration').value;
+            
+            if (!fromCityId || !toCityId) {
+                alert('Please select cities first');
+                return;
+            }
+            
+            if (!name) {
+                alert('Route name is required');
+                return;
+            }
+
+            try {
+                const fromCity = getCityName(fromCityId);
+                const toCity = getCityName(toCityId);
+                
+                const { error } = await supabaseClient
+                    .from('routes')
+                    .insert({
+                        name,
+                        origin: fromCity,
+                        destination: toCity,
+                        from_city_id: fromCityId,
+                        to_city_id: toCityId,
+                        distance_km: distance ? parseInt(distance) : null,
+                        estimated_duration_minutes: duration ? parseInt(duration) : null,
+                        is_active: true
+                    });
+                
+                if (error) throw error;
+                
+                // Clear form
+                document.getElementById('routeName').value = '';
+                document.getElementById('routeDistance').value = '';
+                document.getElementById('routeDuration').value = '';
+                
+                showSuccess('Route added successfully!');
+                loadRoutes();
+            } catch (error) {
+                alert('Error adding route: ' + error.message);
+            }
+        }
+
+        async function createBothDirectionRoutes() {
+            if (!fromCityId || !toCityId) {
+                alert('Please select both cities first');
+                return;
+            }
+
+            const fromCity = getCityName(fromCityId);
+            const toCity = getCityName(toCityId);
+            const distance = document.getElementById('routeDistance').value;
+            const duration = document.getElementById('routeDuration').value;
+
+            try {
+                // Create route from A to B
+                const route1Name = `${fromCity} → ${toCity}`;
+                const { error: error1 } = await supabaseClient
+                    .from('routes')
+                    .insert({
+                        name: route1Name,
+                        origin: fromCity,
+                        destination: toCity,
+                        from_city_id: fromCityId,
+                        to_city_id: toCityId,
+                        distance_km: distance ? parseInt(distance) : null,
+                        estimated_duration_minutes: duration ? parseInt(duration) : null,
+                        is_active: true
+                    });
+
+                if (error1) throw error1;
+
+                // Create route from B to A
+                const route2Name = `${toCity} → ${fromCity}`;
+                const { error: error2 } = await supabaseClient
+                    .from('routes')
+                    .insert({
+                        name: route2Name,
+                        origin: toCity,
+                        destination: fromCity,
+                        from_city_id: toCityId,
+                        to_city_id: fromCityId,
+                        distance_km: distance ? parseInt(distance) : null,
+                        estimated_duration_minutes: duration ? parseInt(duration) : null,
+                        is_active: true
+                    });
+
+                if (error2) throw error2;
+
+                // Clear form
+                document.getElementById('routeName').value = '';
+                document.getElementById('routeDistance').value = '';
+                document.getElementById('routeDuration').value = '';
+
+                showSuccess('Both direction routes created successfully!');
+                loadRoutes();
+            } catch (error) {
+                alert('Error creating routes: ' + error.message);
+            }
+        }
+
+        async function deleteRoute(routeId) {
+            if (!confirm('Delete this route? This will also delete all stops.')) return;
+            
+            try {
+                // First delete route stops
+                await supabaseClient
+                    .from('route_stops')
+                    .delete()
+                    .eq('route_id', routeId);
+
+                // Then delete the route
+                const { error } = await supabaseClient
+                    .from('routes')
+                    .delete()
+                    .eq('id', routeId);
+                
+                if (error) throw error;
+                
+                showSuccess('Route deleted successfully!');
+                loadRoutes();
+                
+                // Close stops section if this route was selected
+                if (selectedRoute && selectedRoute.id === routeId) {
+                    closeStopsSection();
+                }
+            } catch (error) {
+                alert('Error deleting route: ' + error.message);
+            }
+        }
+
+        // Stops Management
+        async function selectRoute(routeId, routeName) {
+            selectedRoute = { id: routeId, name: routeName };
+            document.getElementById('selectedRouteName').textContent = routeName;
+            document.getElementById('fromCityStops').textContent = getCityName(fromCityId);
+            document.getElementById('toCityStops').textContent = getCityName(toCityId);
+            document.getElementById('stopsSection').style.display = 'block';
+            
+            // Scroll to stops section
+            document.getElementById('stopsSection').scrollIntoView({ behavior: 'smooth' });
+            
+            await loadStops();
+        }
+
+        async function loadStops() {
+            if (!selectedRoute) return;
+            
+            try {
+                // Load stops for this route
+                const { data, error } = await supabaseClient
+                    .from('route_stops')
+                    .select(`
+                        id,
+                        stop_name,
+                        stop_order,
+                        stop_id,
+                        stops (
+                            name,
+                            city_id
+                        )
+                    `)
+                    .eq('route_id', selectedRoute.id)
+                    .order('stop_order');
+                
+                if (error) throw error;
+                
+                const stops = data || [];
+                renderStops(stops);
+            } catch (error) {
+                console.error('Error loading stops:', error);
+                alert('Failed to load stops');
+            }
+        }
+
+        function renderStops(stops) {
+            const fromStopsList = document.getElementById('fromStopsList');
+            const toStopsList = document.getElementById('toStopsList');
+            
+            // Clear lists
+            fromStopsList.innerHTML = '';
+            toStopsList.innerHTML = '';
+            
+            // Separate stops by city
+            const fromStops = stops.filter(stop => {
+                if (stop.stops && stop.stops.city_id) {
+                    return stop.stops.city_id === fromCityId;
+                }
+                return stop.stop_order <= Math.ceil(stops.length / 2);
+            });
+            
+            const toStops = stops.filter(stop => {
+                if (stop.stops && stop.stops.city_id) {
+                    return stop.stops.city_id === toCityId;
+                }
+                return stop.stop_order > Math.ceil(stops.length / 2);
+            });
+            
+            // Render from city stops
+            fromStops.forEach(stop => {
+                fromStopsList.appendChild(createStopElement(stop));
+            });
+            
+            // Render to city stops
+            toStops.forEach(stop => {
+                toStopsList.appendChild(createStopElement(stop));
+            });
+            
+            if (stops.length === 0) {
+                fromStopsList.innerHTML = '<div class="text-muted" style="padding: 1rem; text-align: center;">No stops added yet</div>';
+                toStopsList.innerHTML = '<div class="text-muted" style="padding: 1rem; text-align: center;">No stops added yet</div>';
+            }
+        }
+
+        function createStopElement(stop) {
+            const div = document.createElement('div');
+            div.className = 'stop-item';
+            div.innerHTML = `
+                <span class="stop-order">${stop.stop_order}</span>
+                <span style="flex: 1;">${stop.stop_name || stop.stops?.name || 'Unknown'}</span>
+                <button onclick="editStop('${stop.id}', '${stop.stop_name}', ${stop.stop_order})" class="btn" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
+                    ✏️
+                </button>
+                <button onclick="deleteStop('${stop.id}')" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
+                    🗑️
+                </button>
+            `;
+            return div;
+        }
+
+        async function addStop(type) {
+            if (!selectedRoute) return;
+            
+            const stopNameId = type === 'from' ? 'fromStopName' : 'toStopName';
+            const stopOrderId = type === 'from' ? 'fromStopOrder' : 'toStopOrder';
+            
+            const stopName = document.getElementById(stopNameId).value.trim();
+            const stopOrder = document.getElementById(stopOrderId).value;
+            
+            if (!stopName) {
+                alert('Stop name is required');
+                return;
+            }
+            
+            if (!stopOrder) {
+                alert('Stop order is required');
+                return;
+            }
+
+            try {
+                // First create the stop in the stops table
+                const cityId = type === 'from' ? fromCityId : toCityId;
+                const { data: stopData, error: stopError } = await supabaseClient
+                    .from('stops')
+                    .insert({
+                        name: stopName,
+                        city_id: cityId,
+                        is_active: true
+                    })
+                    .select()
+                    .single();
+                
+                if (stopError) throw stopError;
+
+                // Then create the route-stop relationship
+                const { error: routeStopError } = await supabaseClient
+                    .from('route_stops')
+                    .insert({
+                        route_id: selectedRoute.id,
+                        stop_id: stopData.id,
+                        stop_name: stopName,
+                        stop_order: parseInt(stopOrder)
+                    });
+                
+                if (routeStopError) throw routeStopError;
+
+                // Clear form
+                document.getElementById(stopNameId).value = '';
+                document.getElementById(stopOrderId).value = '';
+                
+                showSuccess('Stop added successfully!');
+                loadStops();
+            } catch (error) {
+                alert('Error adding stop: ' + error.message);
+            }
+        }
+
+        async function deleteStop(routeStopId) {
+            if (!confirm('Delete this stop?')) return;
+            
+            try {
+                const { error } = await supabaseClient
+                    .from('route_stops')
+                    .delete()
+                    .eq('id', routeStopId);
+                
+                if (error) throw error;
+                
+                showSuccess('Stop deleted successfully!');
+                loadStops();
+            } catch (error) {
+                alert('Error deleting stop: ' + error.message);
+            }
+        }
+
+        async function editStop(routeStopId, currentName, currentOrder) {
+            const newName = prompt('Enter new stop name:', currentName);
+            if (newName === null) return;
+            
+            const newOrder = prompt('Enter new stop order:', currentOrder);
+            if (newOrder === null) return;
+            
+            if (!newName.trim()) {
+                alert('Stop name cannot be empty');
+                return;
+            }
+
+            try {
+                const { error } = await supabaseClient
+                    .from('route_stops')
+                    .update({
+                        stop_name: newName.trim(),
+                        stop_order: parseInt(newOrder)
+                    })
+                    .eq('id', routeStopId);
+                
+                if (error) throw error;
+                
+                showSuccess('Stop updated successfully!');
+                loadStops();
+            } catch (error) {
+                alert('Error updating stop: ' + error.message);
+            }
+        }
+
+        async function addSampleStops() {
+            if (!selectedRoute || !fromCityId || !toCityId) return;
+            
+            const fromCityName = getCityName(fromCityId);
+            const toCityName = getCityName(toCityId);
+            
+            // Enhanced sample stops data based on research
+            const sampleStopsData = {
+                'Mumbai': [
+                    'Dadar', 'CST', 'Kurla', 'Andheri', 'Borivali', 'Thane', 
+                    'Bandra', 'Vile Parle', 'Goregaon', 'Malad', 'Kandivali',
+                    'Mulund', 'Ghatkopar', 'Chembur', 'Vikhroli'
+                ],
+                'Pune': [
+                    'Swargate', 'Shivaji Nagar', 'Pune Station', 'Katraj', 'Aundh',
+                    'Kothrud', 'Deccan', 'Camp', 'Hadapsar', 'Wakad', 
+                    'Chinchwad', 'Pimpri', 'Nigdi', 'Dehu Road'
+                ],
+                'Nashik': [
+                    'Nashik Road', 'College Road', 'Pathardi Phata', 'CBS',
+                    'Gangapur Road', 'Adgaon', 'Sinnar', 'Igatpuri',
+                    'Ghoti', 'Trimbak Road', 'Cidco'
+                ],
+                'Aurangabad': [
+                    'Aurangabad Central', 'Kranti Chowk', 'Cidco', 'Town Hall',
+                    'Railway Station', 'Medical College', 'MIDC', 'Jalna Road',
+                    'Airport Road', 'Paithan Road'
+                ],
+                'Nagpur': [
+                    'Nagpur Central', 'Itwari', 'Sitabuldi', 'Medical Square',
+                    'Dharampeth', 'Civil Lines', 'Sadar', 'Seminary Hills',
+                    'Wardha Road', 'Amravati Road', 'Kamptee Road'
+                ],
+                'Thane': [
+                    'Thane Station', 'Naupada', 'Kopri', 'Vartak Nagar', 
+                    'Cadbury', 'Wagle Estate', 'Dombivli', 'Kalyan'
+                ],
+                'Kolhapur': [
+                    'Kolhapur Central', 'Mahadwar Road', 'Station Road', 
+                    'Rankala', 'Tarabai Park', 'Udyamnagar', 'Kawala Naka'
+                ],
+                'Solapur': [
+                    'Solapur Central', 'Railway Station', 'Sakhar Peth',
+                    'Budhwar Peth', 'Siddheshwar', 'MIDC', 'Akkalkot Road'
+                ],
+                'Satara': [
+                    'Satara Central', 'Powai Naka', 'Godoli', 'Radhika',
+                    'Wai Road', 'Koregaon', 'Karad Phata'
+                ],
+                'Ahmednagar': [
+                    'Ahmednagar Central', 'Station Road', 'Medical College',
+                    'MIDC', 'Savedi', 'Kedgaon', 'Shrirampur Road'
+                ],
+                'Jalgaon': [
+                    'Jalgaon Central', 'Railway Station', 'MIDC', 
+                    'Medical College', 'Golwad', 'Bhusawal Road'
+                ],
+                'Amravati': [
+                    'Amravati Central', 'Badnera Road', 'Camp', 'Medical Square',
+                    'MIDC', 'Chandur Road', 'Paratwada Road'
+                ],
+                'Akola': [
+                    'Akola Central', 'Station Road', 'Medical College', 
+                    'Cotton Market', 'MIDC', 'Washim Road'
+                ]
+            };
+            
+            try {
+                let order = 1;
+                
+                // Add from city stops
+                const fromStops = sampleStopsData[fromCityName] || [`${fromCityName} Central`, `${fromCityName} Station`, `${fromCityName} MIDC`];
+                for (const stopName of fromStops.slice(0, 4)) { // Limit to 4 stops per city
+                    try {
+                        // Create stop
+                        const { data: stopData, error: stopError } = await supabaseClient
+                            .from('stops')
+                            .upsert({
+                                name: stopName,
+                                city_id: fromCityId,
+                                is_active: true
+                            }, {
+                                onConflict: 'name,city_id',
+                                ignoreDuplicates: false
+                            })
+                            .select()
+                            .single();
+                        
+                        if (stopError) {
+                            console.error('Error creating stop:', stopError);
+                            continue;
+                        }
+
+                        // Create route-stop relationship
+                        const { error: routeStopError } = await supabaseClient
+                            .from('route_stops')
+                            .upsert({
+                                route_id: selectedRoute.id,
+                                stop_id: stopData.id,
+                                stop_name: stopName,
+                                stop_order: order++
+                            }, {
+                                onConflict: 'route_id,stop_id'
+                            });
+                        
+                        if (routeStopError) {
+                            console.error('Error creating route-stop:', routeStopError);
+                        }
+                    } catch (error) {
+                        console.error(`Error adding stop ${stopName}:`, error);
+                    }
+                }
+                
+                // Add to city stops
+                const toStops = sampleStopsData[toCityName] || [`${toCityName} Central`, `${toCityName} Station`, `${toCityName} MIDC`];
+                for (const stopName of toStops.slice(0, 4)) { // Limit to 4 stops per city
+                    try {
+                        // Create stop
+                        const { data: stopData, error: stopError } = await supabaseClient
+                            .from('stops')
+                            .upsert({
+                                name: stopName,
+                                city_id: toCityId,
+                                is_active: true
+                            }, {
+                                onConflict: 'name,city_id',
+                                ignoreDuplicates: false
+                            })
+                            .select()
+                            .single();
+                        
+                        if (stopError) {
+                            console.error('Error creating stop:', stopError);
+                            continue;
+                        }
+
+                        // Create route-stop relationship
+                        const { error: routeStopError } = await supabaseClient
+                            .from('route_stops')
+                            .upsert({
+                                route_id: selectedRoute.id,
+                                stop_id: stopData.id,
+                                stop_name: stopName,
+                                stop_order: order++
+                            }, {
+                                onConflict: 'route_id,stop_id'
+                            });
+                        
+                        if (routeStopError) {
+                            console.error('Error creating route-stop:', routeStopError);
+                        }
+                    } catch (error) {
+                        console.error(`Error adding stop ${stopName}:`, error);
+                    }
+                }
+                
+                showSuccess('Sample stops added successfully!');
+                loadStops();
+            } catch (error) {
+                console.error('Error in addSampleStops:', error);
+                alert('Error adding sample stops: ' + error.message);
+            }
+        }
+
+        function closeStopsSection() {
+            document.getElementById('stopsSection').style.display = 'none';
+            selectedRoute = null;
+        }
+
+        // Utility functions
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('en-IN');
+        }
+
+        function formatTime(minutes) {
+            if (!minutes) return '-';
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+        }
+
+        // Auto-populate common Indian city pairs and routes when page loads
+        window.addEventListener('load', () => {
+            if (config.supabaseUrl && config.supabaseKey) {
+                // Auto-populate sample data if needed
+                setTimeout(checkAndAddSampleCities, 2000);
+            }
+        });
+
+        async function checkAndAddSampleCities() {
+            if (!supabaseClient || !currentUser) return;
+            
+            try {
+                const { data: existingCities, error } = await supabaseClient
+                    .from('cities')
+                    .select('name');
+                
+                if (error) return;
+                
+                if (!existingCities || existingCities.length === 0) {
+                    // Add sample cities
+                    const sampleCities = [
+                        { name: 'Mumbai', state: 'Maharashtra', state_code: 'MH' },
+                        { name: 'Pune', state: 'Maharashtra', state_code: 'MH' },
+                        { name: 'Nashik', state: 'Maharashtra', state_code: 'MH' },
+                        { name: 'Thane', state: 'Maharashtra', state_code: 'MH' },
+                        { name: 'Surat', state: 'Gujarat', state_code: 'GJ' },
+                        { name: 'Ahmedabad', state: 'Gujarat', state_code: 'GJ' }
+                    ];
+                    
+                    for (const city of sampleCities) {
+                        await supabaseClient
+                            .from('cities')
+                            .insert(city);
+                    }
+                    
+                    showSuccess('Sample cities added! You can now create routes.');
+                    loadCities();
+                }
+            } catch (error) {
+                console.log('Could not add sample cities:', error);
+            }
+        }
+    </script>
+</body>
+</html>

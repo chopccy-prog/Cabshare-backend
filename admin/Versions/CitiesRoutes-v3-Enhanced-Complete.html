@@ -1,0 +1,100 @@
+                                ignoreDuplicates: false
+                            })
+                            .select()
+                            .single();
+                        
+                        if (stopError) {
+                            console.error('Error creating stop:', stopError);
+                            continue;
+                        }
+
+                        // Create route-stop relationship
+                        const { error: routeStopError } = await supabaseClient
+                            .from('route_stops')
+                            .upsert({
+                                route_id: selectedRoute.id,
+                                stop_id: stopData.id,
+                                stop_name: stopName,
+                                stop_order: order++
+                            }, {
+                                onConflict: 'route_id,stop_id'
+                            });
+                        
+                        if (routeStopError) {
+                            console.error('Error creating route-stop:', routeStopError);
+                        }
+                    } catch (error) {
+                        console.error(`Error adding stop ${stopName}:`, error);
+                    }
+                }
+                
+                showSuccess('Sample stops added successfully!');
+                loadStops();
+            } catch (error) {
+                console.error('Error in addSampleStops:', error);
+                alert('Error adding sample stops: ' + error.message);
+            }
+        }
+
+        function closeStopsSection() {
+            document.getElementById('stopsSection').style.display = 'none';
+            selectedRoute = null;
+        }
+
+        // Utility functions
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('en-IN');
+        }
+
+        function formatTime(minutes) {
+            if (!minutes) return '-';
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+        }
+
+        // Auto-populate common Indian city pairs and routes when page loads
+        window.addEventListener('load', () => {
+            if (config.supabaseUrl && config.supabaseKey) {
+                // Auto-populate sample data if needed
+                setTimeout(checkAndAddSampleCities, 2000);
+            }
+        });
+
+        async function checkAndAddSampleCities() {
+            if (!supabaseClient || !currentUser) return;
+            
+            try {
+                const { data: existingCities, error } = await supabaseClient
+                    .from('cities')
+                    .select('name');
+                
+                if (error) return;
+                
+                if (!existingCities || existingCities.length === 0) {
+                    // Add sample cities
+                    const sampleCities = [
+                        { name: 'Mumbai', state: 'Maharashtra', state_code: 'MH' },
+                        { name: 'Pune', state: 'Maharashtra', state_code: 'MH' },
+                        { name: 'Nashik', state: 'Maharashtra', state_code: 'MH' },
+                        { name: 'Thane', state: 'Maharashtra', state_code: 'MH' },
+                        { name: 'Aurangabad', state: 'Maharashtra', state_code: 'MH' },
+                        { name: 'Nagpur', state: 'Maharashtra', state_code: 'MH' }
+                    ];
+                    
+                    for (const city of sampleCities) {
+                        await supabaseClient
+                            .from('cities')
+                            .insert(city);
+                    }
+                    
+                    showSuccess('Sample cities added! You can now create routes.');
+                    loadCities();
+                }
+            } catch (error) {
+                console.log('Could not add sample cities:', error);
+            }
+        }
+    </script>
+</body>
+</html>

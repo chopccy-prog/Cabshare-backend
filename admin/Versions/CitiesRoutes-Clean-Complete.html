@@ -1,0 +1,194 @@
+Name = document.getElementById(stopNameId).value.trim();
+            const stopOrder = document.getElementById(stopOrderId).value;
+            
+            if (!stopName) {
+                alert('Stop name is required');
+                return;
+            }
+            
+            if (!stopOrder) {
+                alert('Stop order is required');
+                return;
+            }
+
+            try {
+                const cityId = type === 'from' ? fromCityId : toCityId;
+                const { data: stopData, error: stopError } = await supabaseClient
+                    .from('stops')
+                    .insert({
+                        name: stopName,
+                        city_id: cityId,
+                        is_active: true
+                    })
+                    .select()
+                    .single();
+                
+                if (stopError) throw stopError;
+
+                const { error: routeStopError } = await supabaseClient
+                    .from('route_stops')
+                    .insert({
+                        route_id: selectedRoute.id,
+                        stop_id: stopData.id,
+                        stop_name: stopName,
+                        stop_order: parseInt(stopOrder)
+                    });
+                
+                if (routeStopError) throw routeStopError;
+
+                document.getElementById(stopNameId).value = '';
+                document.getElementById(stopOrderId).value = '';
+                
+                showSuccess('Stop added successfully!');
+                loadStops();
+            } catch (error) {
+                alert('Error adding stop: ' + error.message);
+            }
+        }
+
+        async function deleteStop(routeStopId) {
+            if (!confirm('Delete this stop?')) return;
+            
+            try {
+                const { error } = await supabaseClient
+                    .from('route_stops')
+                    .delete()
+                    .eq('id', routeStopId);
+                
+                if (error) throw error;
+                
+                showSuccess('Stop deleted successfully!');
+                loadStops();
+            } catch (error) {
+                alert('Error deleting stop: ' + error.message);
+            }
+        }
+
+        async function editStop(routeStopId, currentName, currentOrder) {
+            const newName = prompt('Enter new stop name:', currentName);
+            if (newName === null) return;
+            
+            const newOrder = prompt('Enter new stop order:', currentOrder);
+            if (newOrder === null) return;
+            
+            if (!newName.trim()) {
+                alert('Stop name cannot be empty');
+                return;
+            }
+
+            try {
+                const { error } = await supabaseClient
+                    .from('route_stops')
+                    .update({
+                        stop_name: newName.trim(),
+                        stop_order: parseInt(newOrder)
+                    })
+                    .eq('id', routeStopId);
+                
+                if (error) throw error;
+                
+                showSuccess('Stop updated successfully!');
+                loadStops();
+            } catch (error) {
+                alert('Error updating stop: ' + error.message);
+            }
+        }
+
+        async function addSampleStops() {
+            if (!selectedRoute || !fromCityId || !toCityId) return;
+            
+            const fromCityName = getCityName(fromCityId);
+            const toCityName = getCityName(toCityId);
+            
+            const sampleStopsData = {
+                'Mumbai': ['Dadar', 'CST', 'Kurla', 'Andheri', 'Borivali'],
+                'Pune': ['Swargate', 'Shivaji Nagar', 'Pune Station', 'Katraj', 'Aundh'],
+                'Nashik': ['Nashik Road', 'College Road', 'Pathardi Phata', 'CBS'],
+                'Aurangabad': ['Aurangabad Central', 'Kranti Chowk', 'Railway Station'],
+                'Nagpur': ['Nagpur Central', 'Itwari', 'Sitabuldi'],
+                'Thane': ['Thane Station', 'Naupada', 'Kopri'],
+                'Kolhapur': ['Kolhapur Central', 'Station Road'],
+                'Solapur': ['Solapur Central', 'Railway Station']
+            };
+            
+            try {
+                let order = 1;
+                
+                const fromStops = sampleStopsData[fromCityName] || [`${fromCityName} Central`];
+                for (const stopName of fromStops.slice(0, 3)) {
+                    try {
+                        const { data: stopData, error: stopError } = await supabaseClient
+                            .from('stops')
+                            .upsert({
+                                name: stopName,
+                                city_id: fromCityId,
+                                is_active: true
+                            }, {
+                                onConflict: 'name,city_id'
+                            })
+                            .select()
+                            .single();
+                        
+                        if (stopError) continue;
+
+                        await supabaseClient
+                            .from('route_stops')
+                            .upsert({
+                                route_id: selectedRoute.id,
+                                stop_id: stopData.id,
+                                stop_name: stopName,
+                                stop_order: order++
+                            }, {
+                                onConflict: 'route_id,stop_id'
+                            });
+                    } catch (error) {
+                        console.error(`Error adding stop ${stopName}:`, error);
+                    }
+                }
+                
+                const toStops = sampleStopsData[toCityName] || [`${toCityName} Central`];
+                for (const stopName of toStops.slice(0, 3)) {
+                    try {
+                        const { data: stopData, error: stopError } = await supabaseClient
+                            .from('stops')
+                            .upsert({
+                                name: stopName,
+                                city_id: toCityId,
+                                is_active: true
+                            }, {
+                                onConflict: 'name,city_id'
+                            })
+                            .select()
+                            .single();
+                        
+                        if (stopError) continue;
+
+                        await supabaseClient
+                            .from('route_stops')
+                            .upsert({
+                                route_id: selectedRoute.id,
+                                stop_id: stopData.id,
+                                stop_name: stopName,
+                                stop_order: order++
+                            }, {
+                                onConflict: 'route_id,stop_id'
+                            });
+                    } catch (error) {
+                        console.error(`Error adding stop ${stopName}:`, error);
+                    }
+                }
+                
+                showSuccess('Sample stops added successfully!');
+                loadStops();
+            } catch (error) {
+                alert('Error adding sample stops: ' + error.message);
+            }
+        }
+
+        function closeStopsSection() {
+            document.getElementById('stopsSection').style.display = 'none';
+            selectedRoute = null;
+        }
+    </script>
+</body>
+</html>
